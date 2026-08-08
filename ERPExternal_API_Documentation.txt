@@ -1,0 +1,196 @@
+﻿
+TÀI LIỆU API
+EXTERNAL API DOCUMENTATION
+Tài liệu mô tả các endpoint tích hợp bên ngoài (External Router)
+Phiên bản: 1.0
+Ngày cập nhật: 31/7/2026
+Base URL: /api/external
+
+
+Mục lục
+1. Giới thiệu chung
+2. Xác thực (Authentication)
+3. Quy ước chung
+4. Danh sách endpoint
+5. Công ty (Companies) 
+6. Phòng ban (Departments)
+7. Dự án (Projects)
+8. Nhân sự (Employees)
+9. Loại nhiệm vụ (Task Types)
+10. Nhiệm vụ (Tasks)
+11. Mã lỗi & xử lý lỗi
+
+
+1. Giới thiệu chung
+External Router cung cấp tập hợp các API cho phép hệ thống bên ngoài (đối tác tích hợp) truy vấn và thao tác dữ liệu của hệ thống quản lý dự án – nhân sự, bao gồm: công ty, phòng ban, dự án, nhân sự, loại nhiệm vụ và nhiệm vụ.
+Tất cả các endpoint trong tài liệu này đều nằm dưới tiền tố đường dẫn:
+/api/external
+Ví dụ, endpoint lấy danh sách công ty có đường dẫn đầy đủ là:
+GET /api/external/companies
+2. Xác thực (Authentication)
+Toàn bộ endpoint của External Router đều được bảo vệ bởi middleware verifySecretKey. Middleware này chạy trước tất cả các route (router.use(verifySecretKey)), do đó mọi request đều bắt buộc phải xác thực bằng khoá bí mật (secret key) trước khi được xử lý.
+Tên trườngKiểu dữ liệuBắt buộcMô tảSecret KeyHeaderBắt buộcKhoá bí mật dùng để xác thực đối tác gọi API. Cần gửi kèm trong header của mọi request.Ghi chú: Tên header và cơ chế cấp phát khoá bí mật cần được xác nhận lại với đội phát triển backend (được định nghĩa trong middlewares/secret-key.middleware.js) vì không nằm trong phạm vi các file được cung cấp.
+3. Quy ước chung
+ĐỊNH DẠNG PHẢN HỒI (RESPONSE) MẶC ĐỊNH
+{
+  "status": 200,
+  "message": "success",
+  "data": { ... } | [ ... ]
+}
+Tên trườngKiểu dữ liệuMô tảstatusnumberMã trạng thái HTTP trả về (200, 201, 400, 404, 500...).messagestringThông điệp mô tả kết quả xử lý (một số API trả thông điệp bằng tiếng Việt).dataobject | array | nullDữ liệu trả về. Là object khi truy vấn chi tiết (theo id), là array khi truy vấn danh sách.QUY ƯỚC TRUY VẤN DANH SÁCH / CHI TIẾT
+• Nếu truyền tham số id trên query string → API trả về CHI TIẾT (data là 1 object hoặc null nếu không tìm thấy).
+• Nếu không truyền id → API trả về DANH SÁCH (data là mảng), có thể kết hợp tham số search để lọc theo từ khoá.
+ĐỊNH DẠNG GỬI DỮ LIỆU (REQUEST BODY)
+• Các API tạo/cập nhật Phòng ban, Loại nhiệm vụ: gửi dạng application/json.
+• Các API tạo/cập nhật Dự án (có đính kèm tệp): gửi dạng multipart/form-data.
+• Các API xoá: gửi dạng application/json với mảng ids.
+
+
+4. Danh sách endpoint
+Bảng tổng hợp toàn bộ endpoint hiện có của External Router:
+MethodĐường dẫnMô tảGET/companiesLấy danh sách hoặc chi tiết công tyGET/departmentsLấy danh sách hoặc chi tiết phòng banPOST/departments/createTạo mới phòng banPUT/departments/updateCập nhật phòng banDELETE/departments/deleteXoá (mềm) phòng banGET/projectsLấy danh sách hoặc chi tiết dự ánPOST/projects/createTạo mới dự ánPUT/projects/updateCập nhật dự ánDELETE/projects/deleteXoá (mềm) dự ánGET/employeesLấy danh sách hoặc chi tiết nhân sựGET/tasks/typesLấy danh sách hoặc chi tiết loại nhiệm vụPOST/tasks/types/createTạo mới loại nhiệm vụPUT/tasks/types/updateCập nhật loại nhiệm vụDELETE/tasks/types/deleteXoá (mềm) loại nhiệm vụGET/tasksLấy danh sách hoặc chi tiết nhiệm vụ
+Ghi chú: Các route POST/PUT/DELETE /tasks (tạo, cập nhật, xoá nhiệm vụ trực tiếp) hiện đang bị vô hiệu hoá (comment) trong mã nguồn và chưa khả dụng cho đối tác bên ngoài.
+
+
+5. Công ty (Companies) đồng bộ Tổ chức trên 
+5.1. Lấy danh sách / chi tiết công ty
+  GET     /api/external/companies
+Trả về danh sách công ty, hoặc chi tiết một công ty nếu truyền tham số id.
+THAM SỐ QUERY
+Tên trườngKiểu dữ liệuBắt buộcMô tảidnumberKhôngID công ty. Nếu có → trả về chi tiết 1 công ty.searchstringKhôngTừ khoá tìm kiếm theo tên (name) hoặc mô tả (description), dùng LIKE không phân biệt hoa thường.CẤU TRÚC DỮ LIỆU TRẢ VỀ (MỖI CÔNG TY)
+Tên trườngKiểu dữ liệuMô tảidnumberID công ty.namestringTên công ty.descriptionstringMô tả công ty.logo_urlstringĐường dẫn URL logo công ty.{
+  "status": 200,
+  "message": "success",
+  "data": [
+    {
+      "id": 1,
+      "name": "Công ty ABC",
+      "description": "Công ty công nghệ",
+      "logo_url": "https://..."
+    }
+  ]
+}
+
+
+6. Phòng ban (Departments)
+6.1. Lấy danh sách / chi tiết phòng ban
+  GET     /api/external/departments
+Trả về danh sách phòng ban, hoặc chi tiết một phòng ban nếu truyền id.
+THAM SỐ QUERY
+Tên trườngKiểu dữ liệuBắt buộcMô tảidnumberKhôngID phòng ban. Nếu có → trả về chi tiết 1 phòng ban.searchstringKhôngTừ khoá tìm theo tên phòng ban, mô tả, hoặc tên trưởng phòng.CẤU TRÚC DỮ LIỆU TRẢ VỀ (MỖI PHÒNG BAN)
+Tên trườngKiểu dữ liệuMô tảidnumberID phòng ban.namestringTên phòng ban.descriptionstringMô tả phòng ban.managerobjectThông tin trưởng phòng, gồm id và name.Ghi chú: Trong danh sách trả về, các trường id/name của phòng ban thực chất được lấy bí danh (alias) là t.id, t.name trong câu truy vấn — về mặt dữ liệu tương đương departments.id, departments.name.
+6.2. Tạo mới phòng ban
+  POST     /api/external/departments/create
+Tạo mới một phòng ban.
+THAM SỐ BODY (APPLICATION/JSON)
+Tên trườngKiểu dữ liệuBắt buộcMô tảnamestringCóTên phòng ban.descriptionstringKhôngMô tả phòng ban.manager_idnumberKhôngID nhân sự làm trưởng phòng.PHẢN HỒI THÀNH CÔNG (201)
+{
+  "message": "Tạo phòng ban thành công"
+}
+6.3. Cập nhật phòng ban
+  PUT     /api/external/departments/update?id={id}
+Cập nhật thông tin phòng ban theo id truyền trên query string. Chỉ các trường được gửi kèm và khác rỗng mới được cập nhật (cập nhật từng phần).
+THAM SỐ QUERY
+Tên trườngKiểu dữ liệuBắt buộcMô tảidnumberCóID phòng ban cần cập nhật.THAM SỐ BODY (APPLICATION/JSON)
+Tên trườngKiểu dữ liệuBắt buộcMô tảnamestringKhôngTên phòng ban mới.descriptionstringKhôngMô tả mới.manager_idnumberKhôngID trưởng phòng mới.Ghi chú: Nếu không có trường nào hợp lệ để cập nhật, API trả về lỗi 400 với thông điệp "Không có dữ liệu để cập nhật". Nếu không tìm thấy phòng ban, trả về lỗi 404.
+6.4. Xoá phòng ban
+  DELETE     /api/external/departments/delete
+Xoá mềm (soft delete) một hoặc nhiều phòng ban — đánh dấu is_deleted = true, không xoá vật lý khỏi cơ sở dữ liệu.
+THAM SỐ BODY (APPLICATION/JSON)
+Tên trườngKiểu dữ liệuBắt buộcMô tảidsnumber[]CóDanh sách ID phòng ban cần xoá.PHẢN HỒI THÀNH CÔNG (200)
+{
+  "message": "Đã xóa thành công {n} phòng ban"
+}
+
+
+7. Dự án (Projects)
+7.1. Lấy danh sách / chi tiết dự án
+  GET     /api/external/projects
+Trả về danh sách dự án, hoặc chi tiết đầy đủ một dự án (bao gồm thành viên, phòng ban, tài liệu, nhiệm vụ, công ty liên quan) nếu truyền id.
+THAM SỐ QUERY
+Tên trườngKiểu dữ liệuBắt buộcMô tảidnumberKhôngID dự án. Nếu có → trả về chi tiết đầy đủ 1 dự án.searchstringKhôngTừ khoá tìm theo tên dự án, mô tả, hoặc tên trạng thái dự án (chỉ áp dụng khi lấy danh sách).CẤU TRÚC DỮ LIỆU — CHI TIẾT DỰ ÁN (KHI CÓ ID)
+Tên trườngKiểu dữ liệuMô tảid, name, description, ...mixedToàn bộ các cột gốc của bảng projects (p.*): bao gồm start_date, end_date, budget, spent, progress, team_size, manager_id, v.v.project_statusobjectTrạng thái dự án: { id, name }.membersarray<object>Danh sách thành viên dự án: { id, name, email, phone }.departmentsarray<object>Danh sách phòng ban tham gia dự án: { id, name }.documentsarray<object>Danh sách tài liệu công khai đính kèm dự án: { id, name, file_url }.tasksarray<object>Danh sách nhiệm vụ thuộc dự án, mỗi nhiệm vụ gồm: id, name, description, process, date_start, date_end, task_status{id,name}, type_task{id,name}, priority{id,name}, target_type{id,name}.companiesarray<object>Danh sách công ty liên kết với dự án: { id, name }.CẤU TRÚC DỮ LIỆU — DANH SÁCH DỰ ÁN (KHÔNG TRUYỀN ID)
+Tên trườngKiểu dữ liệuMô tảidnumberID dự án.namestringTên dự án.descriptionstringMô tả dự án.start_date / end_datedateNgày bắt đầu / kết thúc dự án.created_atdatetimeThời điểm tạo dự án.project_statusobjectTrạng thái dự án: { id, name }.total_tasksnumberTổng số nhiệm vụ thuộc dự án.total_membersnumberTổng số thành viên dự án.companiesarray<object>Danh sách công ty liên kết: { id, name }.Ghi chú: Danh sách dự án chỉ trả về các dự án chưa bị xoá mềm (is_deleted = false). Ở phần chi tiết, kết quả còn được lọc thêm điều kiện active = true.
+7.2. Tạo mới dự án
+  POST     /api/external/projects/create
+Tạo mới một dự án, có thể đính kèm nhiều tệp tài liệu. Request phải gửi dạng multipart/form-data. Việc tạo dự án được thực hiện trong một transaction — nếu bất kỳ bước nào lỗi, toàn bộ thao tác sẽ được rollback.
+THAM SỐ BODY (MULTIPART/FORM-DATA)
+Tên trườngKiểu dữ liệuBắt buộcMô tảnamestringKhôngTên dự án.descriptionstringKhôngMô tả dự án.manager_idnumberKhôngID người quản lý dự án.progressnumberKhôngTiến độ dự án (%).budgetnumberKhôngNgân sách dự án.spentnumberKhôngChi phí đã sử dụng.start_datedateKhôngNgày bắt đầu (định dạng YYYY-MM-DD).end_datedateKhôngNgày kết thúc (định dạng YYYY-MM-DD).team_sizenumberKhôngQuy mô đội dự án.project_status_idnumberKhôngID trạng thái dự án.company_idnumberCóID công ty sở hữu dự án. Bắt buộc và phải tồn tại trong hệ thống.departmentsarray<number>KhôngDanh sách ID phòng ban tham gia dự án (gửi dạng chuỗi JSON trong form-data).employeesarray<number>KhôngDanh sách ID nhân sự tham gia dự án (gửi dạng chuỗi JSON trong form-data).file (nhiều field-file)file[]KhôngMột hoặc nhiều tệp tài liệu đính kèm dự án, được tải lên Cloudinary.PHẢN HỒI THÀNH CÔNG (201)
+{
+  "status": 201,
+  "message": "Tạo dự án thành công",
+  "data": { "project_id": 12 }
+}
+Ghi chú: Các trường dạng mảng (departments, employees) trong form-data cần được gửi dưới dạng chuỗi JSON hợp lệ (ví dụ: "[1,2,3]"), vì server sẽ cố gắng JSON.parse() giá trị của từng field.
+7.3. Cập nhật dự án
+  PUT     /api/external/projects/update
+Cập nhật thông tin dự án theo id gửi kèm trong body. Chỉ cập nhật các trường được gửi lên và có giá trị khác rỗng. Cũng chạy trong transaction, gửi dạng multipart/form-data.
+THAM SỐ BODY (MULTIPART/FORM-DATA)
+Tên trườngKiểu dữ liệuBắt buộcMô tảidnumberCóID dự án cần cập nhật.name, description, manager_id, progress, budget, spent, start_date, end_date, team_size, project_status_idmixedKhôngCác trường sẽ được cập nhật nếu có giá trị (cập nhật từng phần).company_idnumberKhôngNếu truyền, hệ thống sẽ thay thế toàn bộ liên kết công ty cũ của dự án bằng công ty mới này.departmentsarray<number>KhôngNếu truyền (kể cả mảng rỗng), sẽ thay thế toàn bộ danh sách phòng ban hiện tại của dự án.employeesarray<number>KhôngNếu truyền (kể cả mảng rỗng), sẽ thay thế toàn bộ danh sách thành viên hiện tại của dự án.file (nhiều field-file)file[]KhôngNếu có tệp mới, toàn bộ tài liệu cũ liên kết dự án sẽ bị gỡ và thay bằng danh sách tài liệu mới tải lên.PHẢN HỒI THÀNH CÔNG (200)
+{
+  "status": 200,
+  "message": "Cập nhật dự án thành công",
+  "data": { "project_id": 12 }
+}
+Ghi chú: Đối với company_id, departments, employees và tệp đính kèm: hành vi là GHI ĐÈ (xoá liên kết cũ rồi tạo lại), không phải cộng dồn. Nếu không muốn thay đổi các danh sách này, không nên gửi field tương ứng.
+7.4. Xoá dự án
+  DELETE     /api/external/projects/delete
+Xoá mềm một hoặc nhiều dự án.
+THAM SỐ BODY (APPLICATION/JSON)
+Tên trườngKiểu dữ liệuBắt buộcMô tảidsnumber[]CóDanh sách ID dự án cần xoá.PHẢN HỒI THÀNH CÔNG (200)
+{
+  "message": "Đã xóa {n} dự án thành công"
+}
+
+
+8. Nhân sự (Employees)
+8.1. Lấy danh sách / chi tiết nhân sự
+  GET     /api/external/employees
+Trả về danh sách nhân sự đang hoạt động (active = true), hoặc chi tiết một nhân sự nếu truyền id.
+THAM SỐ QUERY
+Tên trườngKiểu dữ liệuBắt buộcMô tảidnumberKhôngID nhân sự. Nếu có → trả về chi tiết 1 nhân sự (ưu tiên cao hơn search).searchstringKhôngTừ khoá tìm theo tên, email hoặc số điện thoại. Chỉ áp dụng khi không truyền id.CẤU TRÚC DỮ LIỆU TRẢ VỀ (MỖI NHÂN SỰ)
+Tên trườngKiểu dữ liệuMô tảid, name, email, phone, ...mixedToàn bộ các cột gốc của bảng employees (e.*).departmentobjectPhòng ban của nhân sự: { id, name }.positionsobjectChức danh của nhân sự: { id, name } (name lấy từ positions.title).levelsobjectCấp bậc của nhân sự: { id, name }.certificatesarray<object> | nullDanh sách chứng chỉ của nhân sự. Trả về null nếu rỗng.skillsarray<object> | nullDanh sách kỹ năng: { id, name, value, id_skill_group, max_value_skill }. Trả về null nếu rỗng.employee_attendance_policyobjectChính sách chấm công áp dụng cho nhân sự: { id, checkin, checkout }.leave_grantnumberSố ngày phép được cấp cho nhân sự.Ghi chú: Trường max_value_skill trong mỗi kỹ năng được lấy từ bảng cấu hình hệ thống settings (id = 11) — là giá trị kỹ năng tối đa dùng để tham chiếu khi hiển thị thang đo kỹ năng, mặc định là 100 nếu chưa cấu hình.
+
+
+9. Loại nhiệm vụ (Task Types) : ĐƯỢC đồng bộ LÀ CHECKLIST
+9.1. Lấy danh sách / chi tiết loại nhiệm vụ
+  GET     /api/external/tasks/types
+Trả về danh sách hoặc chi tiết loại nhiệm vụ (chỉ những loại chưa bị xoá mềm).
+THAM SỐ QUERY
+Tên trườngKiểu dữ liệuBắt buộcMô tảidnumberKhôngID loại nhiệm vụ. Nếu có → trả về chi tiết. Trả lỗi 404 nếu không tìm thấy.searchstringKhôngTừ khoá tìm theo tên loại nhiệm vụ, tên dự án được gán, hoặc tên nhiệm vụ thuộc loại đó.CẤU TRÚC DỮ LIỆU — CHI TIẾT (KHI CÓ ID)
+Tên trườngKiểu dữ liệuMô tảidnumberID loại nhiệm vụ.namestringTên loại nhiệm vụ.activebooleanTrạng thái kích hoạt (lấy từ cột status).is_defaultbooleanLoại nhiệm vụ mặc định hay không. Loại mặc định không gán riêng cho dự án nào.projectsarray<object>Danh sách dự án được gán loại nhiệm vụ này (rỗng nếu is_default = true): { id, name }.tasksarray<object>Danh sách nhiệm vụ thuộc loại này: { id, name }.CẤU TRÚC DỮ LIỆU — DANH SÁCH (KHÔNG TRUYỀN ID)
+Tên trườngKiểu dữ liệuMô tảid, name, active, is_defaultmixedTương tự phần chi tiết.projectsarray<object>Danh sách dự án được gán (rỗng nếu is_default = true).total_tasksnumberTổng số nhiệm vụ thuộc loại này (thay cho danh sách tasks đầy đủ).9.2. Tạo mới loại nhiệm vụ 
+  POST     /api/external/tasks/types/create
+Tạo mới một loại nhiệm vụ. Tên loại nhiệm vụ không được trùng (không phân biệt hoa thường) với loại đang tồn tại.
+THAM SỐ BODY (APPLICATION/JSON)
+Tên trườngKiểu dữ liệuBắt buộcMô tảnamestringCóTên loại nhiệm vụ.is_defaultbooleanKhôngMặc định false. Nếu true, không được gửi kèm danh sách projects.projectsarray<object {id}>KhôngDanh sách dự án được gán loại nhiệm vụ này. Chỉ áp dụng khi is_default = false.PHẢN HỒI
+Tên trườngKiểu dữ liệuMô tả400errorThiếu tên, tên đã tồn tại, hoặc gán projects cho loại mặc định.200successTạo loại nhiệm vụ thành công.9.3. Cập nhật loại nhiệm vụ : 
+  PUT     /api/external/tasks/types/update
+Cập nhật loại nhiệm vụ. Toàn bộ liên kết dự án cũ sẽ bị xoá và thay thế bằng danh sách projects mới được gửi lên (nếu có).
+THAM SỐ BODY (APPLICATION/JSON)
+Tên trườngKiểu dữ liệuBắt buộcMô tảidnumberCóID loại nhiệm vụ cần cập nhật.namestringCóTên loại nhiệm vụ mới, không được trùng với loại khác.statusbooleanKhôngTrạng thái kích hoạt.is_defaultbooleanKhôngMặc định false. Nếu true, không được gửi kèm projects.projectsarray<object {id}>KhôngDanh sách dự án mới được gán (ghi đè toàn bộ danh sách cũ).PHẢN HỒI
+Tên trườngKiểu dữ liệuMô tả400errorThiếu ID/tên, tên trùng, hoặc gán projects cho loại mặc định.404errorKhông tìm thấy loại nhiệm vụ.200successCập nhật loại nhiệm vụ thành công.9.4. Xoá loại nhiệm vụ
+  DELETE     /api/external/tasks/types/delete
+Xoá mềm một hoặc nhiều loại nhiệm vụ.
+THAM SỐ BODY (APPLICATION/JSON)
+Tên trườngKiểu dữ liệuBắt buộcMô tảidsnumber[]CóDanh sách ID loại nhiệm vụ cần xoá.PHẢN HỒI
+Tên trườngKiểu dữ liệuMô tả400errorThiếu danh sách ID hoặc ID không hợp lệ.404errorKhông tìm thấy loại nhiệm vụ để xoá.200successĐã xoá {n} loại nhiệm vụ.
+
+10. Nhiệm vụ (Tasks) : Đồng bộ Công việc của Checklist
+10.1. Lấy danh sách / chi tiết nhiệm vụ
+  GET     /api/external/tasks
+Trả về danh sách nhiệm vụ theo bộ lọc, hoặc chi tiết đầy đủ một nhiệm vụ (bao gồm phân công và nhiệm vụ con) nếu truyền id.
+THAM SỐ QUERY
+Tên trườngKiểu dữ liệuBắt buộcMô tảidnumberKhôngID nhiệm vụ. Nếu có → trả về chi tiết đầy đủ 1 nhiệm vụ (các tham số lọc khác bị bỏ qua).project_idnumberKhôngLọc nhiệm vụ theo dự án.company_idnumberKhôngLọc nhiệm vụ theo công ty sở hữu dự án.task_type_idnumberKhôngLọc nhiệm vụ theo loại nhiệm vụ.searchstringKhôngTìm theo tên hoặc mô tả nhiệm vụ.CẤU TRÚC DỮ LIỆU — CHI TIẾT NHIỆM VỤ (KHI CÓ ID)
+Tên trườngKiểu dữ liệuMô tảid, name, description, processmixedThông tin cơ bản của nhiệm vụ. process là % tiến độ.date_start / date_end / created_atdate/datetimeNgày bắt đầu, kết thúc, thời điểm tạo.typeobjectLoại nhiệm vụ: { id, name }.priorityobjectĐộ ưu tiên: { id, name }.statusobjectTrạng thái nhiệm vụ: { id, name }.projectobjectDự án chứa nhiệm vụ: { id, name }.assigneeobjectNgười được giao phụ trách chính: { id, name, avatar }.target_typeobjectLoại chỉ tiêu KPI liên quan: { id, name }.kpi_itemobjectChỉ tiêu KPI liên kết: { id, name }.employee_assignmentsarray<object>Danh sách phân công nhân sự cho nhiệm vụ, xem chi tiết bảng bên dưới.CHI TIẾT TRƯỜNG EMPLOYEE_ASSIGNMENTS[]
+Tên trườngKiểu dữ liệuMô tảidnumberID bản ghi phân công.completed_datedateNgày hoàn thành.provestringMinh chứng hoàn thành công việc (nếu có).checkedbooleanĐã được kiểm tra/duyệt hay chưa.processnumberTiến độ phân công (%).employeeobjectNhân sự được phân công: { id, name, avatar }.statusobjectTrạng thái phân công: { id, name }.subtasksarray<object>Danh sách nhiệm vụ con: { id, name, process, status{id,name} }, sắp xếp theo thời gian tạo.CẤU TRÚC DỮ LIỆU — DANH SÁCH NHIỆM VỤ (KHÔNG TRUYỀN ID)
+Tên trườngKiểu dữ liệuMô tảid, name, description, processmixedThông tin cơ bản của nhiệm vụ.date_start / date_end / created_atdate/datetimeNgày bắt đầu, kết thúc, thời điểm tạo.typeobjectLoại nhiệm vụ: { id, name }.statusobjectTrạng thái: { id, name }.projectobjectDự án: { id, name }.companyobjectCông ty sở hữu dự án: { id, name, logo }.priorityobjectĐộ ưu tiên: { id, name }.assigneeobjectNgười phụ trách chính: { id, name, avatar }.Ghi chú: Các endpoint tạo, cập nhật và xoá nhiệm vụ trực tiếp qua External Router (POST/PUT/DELETE /tasks) hiện đang tạm khoá trong mã nguồn và chưa được công bố cho đối tác bên ngoài.
+
+
+11. Mã lỗi & xử lý lỗi
+Các mã trạng thái HTTP có thể gặp khi gọi API của External Router:
+Tên trườngKiểu dữ liệuMô tả200OKYêu cầu xử lý thành công (truy vấn, cập nhật, xoá).201CreatedTạo mới dữ liệu thành công (dự án, phòng ban).400Bad RequestThiếu tham số bắt buộc, dữ liệu không hợp lệ, hoặc vi phạm ràng buộc nghiệp vụ (ví dụ: tên đã tồn tại).404Not FoundKhông tìm thấy dữ liệu tương ứng với ID được truyền lên.500Internal Server ErrorLỗi hệ thống ngoài dự kiến. Nội dung thông điệp lỗi thường là "Lỗi hệ thống".Ghi chú: Với các thao tác tạo/cập nhật dự án (có transaction), nếu có lỗi xảy ra ở bất kỳ bước nào, toàn bộ thay đổi trong transaction sẽ được rollback để đảm bảo tính toàn vẹn dữ liệu.
+External API Documentation	External Router
+
+Trang 1 / 2
+
