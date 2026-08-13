@@ -32,18 +32,32 @@ try {
   standalonePkg.version = rootPkg.version;
   standalonePkg.repository = rootPkg.repository;
   
+  // Copy .env.local if exists
+  const envLocalPath = path.join(__dirname, '.env.local');
+  if (fs.existsSync(envLocalPath)) {
+    fs.copyFileSync(envLocalPath, path.join(__dirname, '.next', 'standalone', '.env.local'));
+  }
+
   // Clone build config from root
   standalonePkg.build = JSON.parse(JSON.stringify(rootPkg.build));
   standalonePkg.build.directories = { output: "../../dist" };
   standalonePkg.build.files = ["**/*"];
-  // We don't unpack anything unless absolutely necessary to keep bundle size small
-  standalonePkg.build.asarUnpack = ["server.js"];
   standalonePkg.build.npmRebuild = false;
   
+  // Update asarUnpack to include .env.local
+  if (!standalonePkg.build.asarUnpack) standalonePkg.build.asarUnpack = [];
+  standalonePkg.build.asarUnpack.push(".env.local");
   standalonePkg.author = "Author"; // electron-builder requires author and description
   standalonePkg.description = "Project Management App";
   
   fs.writeFileSync(standalonePkgPath, JSON.stringify(standalonePkg, null, 2));
+
+  console.log('Installing electron main process dependencies in standalone directory...');
+  const { execSync } = require('child_process');
+  execSync('npm install electron-updater dotenv --no-save', {
+    cwd: path.join(__dirname, '.next', 'standalone'),
+    stdio: 'inherit'
+  });
 
   console.log('Cleaning up unnecessary files (.map, READMEs, LICENSEs) to reduce size...');
   const standaloneDir = path.join(__dirname, '.next', 'standalone');
