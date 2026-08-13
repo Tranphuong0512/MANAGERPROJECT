@@ -44,9 +44,8 @@ try {
   standalonePkg.build.files = ["**/*"];
   standalonePkg.build.npmRebuild = false;
   
-  // Update asarUnpack to include .env.local
-  if (!standalonePkg.build.asarUnpack) standalonePkg.build.asarUnpack = [];
-  standalonePkg.build.asarUnpack.push(".env.local");
+  // Update asarUnpack to only include .env.local to speed up installation and startup
+  standalonePkg.build.asarUnpack = [".env.local"];
   standalonePkg.author = "Author"; // electron-builder requires author and description
   standalonePkg.description = "Project Management App";
   

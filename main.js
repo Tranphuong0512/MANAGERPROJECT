@@ -21,23 +21,15 @@ function getFreePort() {
   });
 }
 
-/**
- * Resolve path for files that are asarUnpacked.
- * In packaged app, unpacked files live at:
- *   <resourcesPath>/app.asar.unpacked/<relativePath>
- * In dev mode they are just at __dirname.
- */
-function getUnpackedPath(relativePath) {
-  if (app.isPackaged) {
-    // Files declared in asarUnpack are extracted to app.asar.unpacked
-    return path.join(process.resourcesPath, 'app.asar.unpacked', relativePath);
-  }
+const { utilityProcess } = require('electron');
+
+function getAppPath(relativePath) {
   return path.join(__dirname, relativePath);
 }
 
 function loadEnvVariables() {
   try {
-    const envPath = getUnpackedPath('.env.local');
+    const envPath = getAppPath('.env.local');
     const fs = require('fs');
     if (fs.existsSync(envPath)) {
       require('dotenv').config({ path: envPath });
@@ -51,33 +43,32 @@ function loadEnvVariables() {
 function startNextServer(port) {
   return new Promise((resolve, reject) => {
     loadEnvVariables();
-    const serverScript = getUnpackedPath('server.js');
+    const serverScript = getAppPath('server.js');
 
-    serverProcess = spawn(process.execPath, [serverScript], {
+    serverProcess = utilityProcess.fork(serverScript, [], {
       env: {
         ...process.env,
         PORT: port.toString(),
         NODE_ENV: 'production',
         HOSTNAME: '127.0.0.1',
-        ELECTRON_RUN_AS_NODE: '1',
       },
-      // cwd must be the unpacked directory so relative requires in server.js work
-      cwd: app.isPackaged
-        ? path.join(process.resourcesPath, 'app.asar.unpacked')
-        : __dirname,
+      cwd: __dirname,
     });
 
-    serverProcess.stdout.on('data', (data) => {
-      console.log('[Next.js]', data.toString());
+    serverProcess.on('message', (msg) => {
+      console.log('[Next.js]', msg);
     });
 
-    serverProcess.stderr.on('data', (data) => {
+    serverProcess.stdout?.on('data', (data) => {
+      console.log('[Next.js stdout]', data.toString());
+    });
+
+    serverProcess.stderr?.on('data', (data) => {
       console.error('[Next.js Error]', data.toString());
     });
 
-    serverProcess.on('error', (err) => {
-      console.error('Server process error:', err);
-      reject(err);
+    serverProcess.on('exit', (code) => {
+      console.log('Next.js server exited with code:', code);
     });
 
     // Poll until port is open (server is ready)
