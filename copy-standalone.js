@@ -36,6 +36,8 @@ try {
   standalonePkg.build = JSON.parse(JSON.stringify(rootPkg.build));
   standalonePkg.build.directories = { output: "../../dist" };
   standalonePkg.build.files = ["**/*"];
+  // We don't unpack anything unless absolutely necessary to keep bundle size small
+  standalonePkg.build.asarUnpack = ["server.js"];
   standalonePkg.build.npmRebuild = false;
   
   standalonePkg.author = "Author"; // electron-builder requires author and description
@@ -43,10 +45,33 @@ try {
   
   fs.writeFileSync(standalonePkgPath, JSON.stringify(standalonePkg, null, 2));
 
+  console.log('Cleaning up unnecessary files (.map, READMEs, LICENSEs) to reduce size...');
+  const standaloneDir = path.join(__dirname, '.next', 'standalone');
+  
+  function cleanUpFiles(dir) {
+    if (!fs.existsSync(dir)) return;
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const fullPath = path.join(dir, file);
+      const stat = fs.statSync(fullPath);
+      if (stat.isDirectory()) {
+        cleanUpFiles(fullPath);
+      } else {
+        const fileName = file.toLowerCase();
+        if (fullPath.endsWith('.map') || 
+            fileName === 'readme.md' || 
+            fileName === 'readme' ||
+            fileName === 'license' || 
+            fileName === 'changelog.md') {
+          fs.unlinkSync(fullPath);
+        }
+      }
+    }
+  }
+  cleanUpFiles(standaloneDir);
 
   console.log('Standalone preparation complete!');
 } catch (err) {
   console.error('Error copying files:', err);
   process.exit(1);
 }
-

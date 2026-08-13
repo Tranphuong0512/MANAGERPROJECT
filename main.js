@@ -1,4 +1,5 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const { spawn } = require('child_process');
 const net = require('net');
@@ -133,6 +134,33 @@ async function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+
+  if (app.isPackaged) {
+    // Check for updates
+    autoUpdater.checkForUpdatesAndNotify();
+
+    autoUpdater.on('update-available', () => {
+      console.log('Update available.');
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Cập nhật phần mềm',
+        message: 'Có phiên bản mới. Ứng dụng sẽ khởi động lại để cài đặt.',
+        buttons: ['Khởi động lại ngay']
+      }).then((result) => {
+        if (result.response === 0) {
+          autoUpdater.quitAndInstall();
+        }
+      });
+    });
+
+    autoUpdater.on('error', (err) => {
+      console.error('Lỗi khi cập nhật:', err);
+    });
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
