@@ -51,6 +51,14 @@ try {
   
   fs.writeFileSync(standalonePkgPath, JSON.stringify(standalonePkg, null, 2));
 
+  // Patch server.js to fix ASAR issues (process.chdir cannot take an ASAR path)
+  const serverJsPath = path.join(__dirname, '.next', 'standalone', 'server.js');
+  if (fs.existsSync(serverJsPath)) {
+    let serverJs = fs.readFileSync(serverJsPath, 'utf8');
+    serverJs = serverJs.replace('process.chdir(__dirname)', 'process.chdir = () => {}; process.cwd = () => __dirname;');
+    fs.writeFileSync(serverJsPath, serverJs);
+  }
+
   console.log('Installing electron main process dependencies in standalone directory...');
   const { execSync } = require('child_process');
   execSync('npm install electron-updater dotenv --no-save', {

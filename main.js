@@ -52,7 +52,7 @@ function startNextServer(port) {
         NODE_ENV: 'production',
         HOSTNAME: '127.0.0.1',
       },
-      cwd: __dirname,
+      cwd: app.isPackaged ? process.resourcesPath : __dirname,
     });
 
     serverProcess.on('message', (msg) => {
