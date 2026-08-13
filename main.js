@@ -1,7 +1,7 @@
 const { app, BrowserWindow, Menu, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
-const { spawn } = require('child_process');
+
 const net = require('net');
 
 // Disable security warnings
@@ -100,7 +100,7 @@ async function createWindow() {
       height: 800,
       minWidth: 800,
       minHeight: 600,
-      icon: getUnpackedPath(path.join('public', 'icon.jpg')),
+      icon: getAppPath(path.join('public', 'icon.jpg')),
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
