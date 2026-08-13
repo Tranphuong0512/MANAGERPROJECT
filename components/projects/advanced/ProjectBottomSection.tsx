@@ -33,66 +33,139 @@ export function ProjectBottomSection({ projectId }: { projectId?: string }) {
           setProjectData(pData)
         }
 
-        // Fetch members for profiles mapping
+        // Fetch members for profiles mapping (Supabase org members + APEC employees)
         let orgMembers: any[] = []
-        if (pData?.organization_id) {
-          const { data: mData } = await supabase
-            .from('organization_members')
-            .select('user_id, profiles(full_name)')
-            .eq('organization_id', pData.organization_id)
-            .is('deleted_at', null)
-          
-          if (mData) {
-            const uniqueMembers = new Map();
-            mData.forEach(m => {
-              if (m.user_id && !uniqueMembers.has(m.user_id)) {
-                uniqueMembers.set(m.user_id, {
-                  id: m.user_id,
-                  full_name: Array.isArray((m as any).profiles) ? (m as any).profiles[0]?.full_name : (m as any).profiles?.full_name || 'Chưa rõ'
-                });
-              } else if (m.user_id && (m as any).profiles && uniqueMembers.get(m.user_id).full_name === 'Chưa rõ') {
-                uniqueMembers.set(m.user_id, {
-                  id: m.user_id,
-                  full_name: Array.isArray((m as any).profiles) ? (m as any).profiles[0]?.full_name : (m as any).profiles.full_name
-                });
-              }
-            });
-            orgMembers = Array.from(uniqueMembers.values());
-            setMembers(orgMembers)
-          }
+        const uniqueMembers = new Map();
+
+        const [mDataRes, apecEmpRes] = await Promise.all([
+          pData?.organization_id 
+            ? supabase.from('organization_members').select('user_id, profiles(full_name)').eq('organization_id', pData.organization_id).is('deleted_at', null)
+            : Promise.resolve({ data: null }),
+          fetch('/api/v1/apec-global/employees').then(r => r.json()).catch(() => ({ items: [] }))
+        ]);
+        
+        if (mDataRes.data) {
+          mDataRes.data.forEach((m: any) => {
+            if (m.user_id) {
+              const fullName = Array.isArray((m as any).profiles) ? (m as any).profiles[0]?.full_name : (m as any).profiles?.full_name || 'Chưa rõ';
+              uniqueMembers.set(m.user_id, { id: m.user_id, raw_id: m.user_id, full_name: fullName });
+            }
+          });
         }
 
-        // Fetch Incidents
-        const { data: incs } = await supabase
+        if (apecEmpRes.items) {
+          apecEmpRes.items.forEach((e: any) => {
+            const empId = String(e.id);
+            const fullName = e.fullname || e.name || e.email || 'Chưa rõ';
+            if (!uniqueMembers.has(empId)) uniqueMembers.set(empId, { id: empId, raw_id: e.id, full_name: fullName });
+          });
+        }
+        orgMembers = Array.from(uniqueMembers.values());
+        setMembers(orgMembers);
+
+        const findStaff = (idVal: any) => {
+          if (!idVal) return undefined;
+          const strId = String(idVal);
+          const cleanId = strId.replace('apec_', '');
+          return orgMembers.find((m: any) => 
+            String(m.id) === strId || 
+            String(m.id) === cleanId || 
+            String(m.raw_id) === cleanId ||
+            String(m.id).replace('apec_', '') === cleanId
+          );
+        };
+
+        // Fetch Incidents from Supabase
+        let { data: incs } = await supabase
           .from('incidents')
           .select('*')
-          .eq('project_id', projectId)
-          .order('created_at', { ascending: false })
-          .limit(10)
-        
-        if (incs) {
-          setIncidents(incs.map(inc => ({
-            ...inc,
-            reporter: orgMembers.find(m => m.id === inc.reported_by),
-            assignee: orgMembers.find(m => m.id === inc.assigned_to)
-          })))
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false });
+
+        let filteredIncs = (incs || []).filter(inc => 
+          inc.project_id === projectId || 
+          String(inc.project_id) === String(projectId).replace(/^p-/, '')
+        );
+
+        // Fallback: If no direct incidents in Supabase, fetch board-data incident tasks
+        if (filteredIncs.length === 0 && projectId) {
+          try {
+            const bdRes = await fetch(`/api/v1/projects/${projectId}/board-data`).then(r => r.json());
+            const actualProjectName = bdRes?.projectName || bdRes?.project?.name || '';
+            if (bdRes && bdRes.checklists) {
+              const incidentChecklist = bdRes.checklists.find((c: any) => 
+                (c.title || '').toUpperCase().includes('S\u1ef0 C\u1ed0') || (c.title || '').toUpperCase().includes('R\u1ee6I RO')
+              );
+              if (incidentChecklist && incidentChecklist.checklist_items) {
+                // Map APEC task status_id → incident status
+                const mapStatus = (item: any): string => {
+                  if (item.status === 'done' || item.is_completed) return 'resolved';
+                  if (item.status === 'review') return 'fixing';
+                  if (item.status === 'in_progress') return 'investigating';
+                  // also check numeric status from APEC raw
+                  const sid = Number(item.apec_status_id || item.task_status_id);
+                  if (sid === 4) return 'resolved';
+                  if (sid === 3) return 'fixing';
+                  if (sid === 2) return 'investigating';
+                  return 'new';
+                };
+                const mapPriority = (item: any): string => {
+                  const pid = Number(item.priority_id || item.priority?.id);
+                  if (pid >= 5) return 'critical';
+                  if (pid === 4) return 'high';
+                  if (pid <= 2 && pid > 0) return 'low';
+                  return item.severity || 'medium';
+                };
+                filteredIncs = incidentChecklist.checklist_items
+                  .filter((item: any) => !item.is_deleted && !item.deleted_at && item.status !== 'deleted')
+                  .map((item: any) => {
+                    const assigneeObj = item.assignees?.[0];
+                    const numericId = String(item.id).replace(/^(inc_|apec_|t_|st_)/, '');
+                    return {
+                      id: numericId,
+                      code: `BUG-${numericId}`,
+                      title: item.title || item.name,
+                      module: item.module || item.type_name || 'Hệ thống',
+                      severity: mapPriority(item),
+                      status: mapStatus(item),
+                      created_at: item.created_at || new Date().toISOString(),
+                      reported_by: item.reporter_id || null,
+                      assigned_to: assigneeObj?.raw_id || assigneeObj?.id || null,
+                      project_name: actualProjectName,
+                      projects: { name: actualProjectName || 'Chưa xác định' }
+                    };
+                  });
+              }
+            }
+          } catch (bdErr) {
+            console.warn('L\u1ed7i load board data incidents fallback:', bdErr);
+          }
         }
+        
+        setIncidents(filteredIncs.map(inc => ({
+          ...inc,
+          reporter: findStaff(inc.reported_by),
+          assignee: findStaff(inc.assigned_to)
+        })))
 
         // Fetch Improvements
         const { data: imps } = await supabase
           .from('improvements')
           .select('*')
-          .eq('project_id', projectId)
+          .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(10)
         
-        if (imps) {
-          setImprovements(imps.map(imp => ({
-            ...imp,
-            reporter: orgMembers.find(m => m.id === imp.reporter_id),
-            assignee: orgMembers.find(m => m.id === imp.assigned_to)
-          })))
-        }
+        let filteredImps = (imps || []).filter(imp => 
+          imp.project_id === projectId || 
+          String(imp.project_id) === String(projectId).replace(/^p-/, '')
+        );
+
+        setImprovements(filteredImps.map(imp => ({
+          ...imp,
+          reporter: findStaff(imp.reporter_id),
+          assignee: findStaff(imp.assigned_to)
+        })))
 
         // Fetch Activities
         const { data: acts } = await supabase
@@ -180,15 +253,15 @@ export function ProjectBottomSection({ projectId }: { projectId?: string }) {
             else if (b.severity === 'medium') { severityStyle = 'text-yellow-700 bg-yellow-50 border-yellow-200'; severityText = 'TB' }
 
             let statusStyle = 'text-slate-500 bg-slate-100 border-slate-200'
-            let statusText = 'Đã đóng'
-            if (b.status === 'new') { statusStyle = 'text-red-600 bg-red-50 border-red-200'; statusText = 'Mới' }
-            else if (b.status === 'investigating') { statusStyle = 'text-orange-600 bg-orange-50 border-orange-200'; statusText = 'Đang điều tra' }
-            else if (b.status === 'fixing') { statusStyle = 'text-blue-600 bg-blue-50 border-blue-200'; statusText = 'Đang sửa' }
-            else if (b.status === 'resolved') { statusStyle = 'text-green-600 bg-green-50 border-green-200'; statusText = 'Đã khắc phục' }
+            let statusText = 'Hoàn thành'
+            if (b.status === 'new') { statusStyle = 'text-red-600 bg-red-50 border-red-200'; statusText = 'Chưa thực hiện' }
+            else if (b.status === 'investigating') { statusStyle = 'text-orange-600 bg-orange-50 border-orange-200'; statusText = 'Đang xử lý' }
+            else if (b.status === 'fixing') { statusStyle = 'text-blue-600 bg-blue-50 border-blue-200'; statusText = 'Đang thực hiện' }
+            else if (b.status === 'resolved') { statusStyle = 'text-green-600 bg-green-50 border-green-200'; statusText = 'Hoàn thành' }
 
             return (
               <div key={i} onClick={() => setSelectedIncident(b)} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer group">
-                <span className="text-xs font-bold text-slate-500 w-14">BUG-{b.id.substring(0,4).toUpperCase()}</span>
+                <span className="text-xs font-bold text-slate-500 w-14">BUG-{b.id.length > 4 ? b.id.substring(0,4) : b.id}</span>
                 <div className="flex-1">
                   <div className="text-xs font-semibold text-slate-800 group-hover:text-blue-600 truncate">{b.title}</div>
                   <div className="text-[10px] text-slate-500">{b.module || 'Hệ thống'}</div>
@@ -407,6 +480,8 @@ export function ProjectBottomSection({ projectId }: { projectId?: string }) {
         onOpenChange={setShowIncidentDialog}
         organizationId={organizationId}
         projectId={projectId!}
+        members={members}
+        projects={projectData ? [projectData] : []}
         onIncidentCreated={() => loadData()}
       />
 
@@ -415,6 +490,8 @@ export function ProjectBottomSection({ projectId }: { projectId?: string }) {
         onOpenChange={setShowImprovementDialog}
         organizationId={organizationId}
         projectId={projectId!}
+        members={members}
+        projects={projectData ? [projectData] : []}
         onSaved={() => loadData()}
       />
 

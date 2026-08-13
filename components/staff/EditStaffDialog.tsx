@@ -100,10 +100,12 @@ export function EditStaffDialog({
         throw new Error('Vui lòng chọn ít nhất 1 Tổ chức')
       }
 
+      const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/staff', {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
         body: JSON.stringify({
           id: staff.id,
@@ -332,3 +334,4 @@ export function EditStaffDialog({
     </div>
   )
 }
+

@@ -24,8 +24,25 @@ export function IncidentSlideOver({ incident: initialIncident, members = [], onC
     status: '',
     module: '',
     reported_by: '',
-    assigned_to: ''
+    assigned_to: '',
+    department_id: ''
   })
+
+  const [departments, setDepartments] = useState<any[]>([])
+
+  // Helper: resolve staff name from members list with flexible ID matching
+  const resolveStaffName = (idVal: any): string | null => {
+    if (!idVal) return null
+    const strId = String(idVal)
+    const cleanId = strId.replace('apec_', '')
+    const found = members.find((m: any) =>
+      String(m.id) === strId ||
+      String(m.id) === cleanId ||
+      String(m.raw_id || '') === cleanId ||
+      String(m.id).replace('apec_', '') === cleanId
+    )
+    return found?.full_name || null
+  }
 
   useEffect(() => {
     if (initialIncident) {
@@ -37,13 +54,38 @@ export function IncidentSlideOver({ incident: initialIncident, members = [], onC
         status: initialIncident.status || 'new',
         module: initialIncident.module || '',
         reported_by: initialIncident.reported_by || '',
-        assigned_to: initialIncident.assigned_to || ''
+        assigned_to: initialIncident.assigned_to || '',
+        department_id: initialIncident.department_id || ''
       })
       setIsEditing(false)
+
+      const loadDepartments = async () => {
+        // Load Supabase departments
+        let supabaseDepts: any[] = []
+        if (initialIncident.organization_id) {
+          const { data } = await supabase.from('departments').select('id, name').eq('organization_id', initialIncident.organization_id).order('name')
+          supabaseDepts = data || []
+        }
+        // Load APEC departments
+        try {
+          const apecRes = await fetch('/api/v1/apec-global/departments').then(r => r.json())
+          const apecDepts = (apecRes.items || []).map((d: any) => ({
+            id: String(d.id),
+            name: d.name || d.department_name || ''
+          }))
+          // Merge: Supabase first, then APEC (avoid duplicates by name)
+          const nameSet = new Set(supabaseDepts.map((d: any) => d.name.toLowerCase()))
+          const merged = [...supabaseDepts, ...apecDepts.filter((d: any) => !nameSet.has(d.name.toLowerCase()))]
+          setDepartments(merged)
+        } catch {
+          setDepartments(supabaseDepts)
+        }
+      }
+      loadDepartments()
     } else {
       setIncident(null)
     }
-  }, [initialIncident])
+  }, [initialIncident, members])
 
   if (!incident) return null
 
@@ -61,52 +103,83 @@ export function IncidentSlideOver({ incident: initialIncident, members = [], onC
     return '⚪ Thấp'
   }
 
-  const getStatusStyle = (s: string) => {
-    if (s === 'new') return 'text-red-600 bg-red-50'
-    if (s === 'investigating') return 'text-orange-600 bg-orange-50'
-    if (s === 'fixing') return 'text-blue-600 bg-blue-50'
-    if (s === 'resolved') return 'text-green-600 bg-green-50'
+  const getStatusStyle = (s: string | number) => {
+    const str = String(s || '').toLowerCase()
+    if (str === '1' || str === 'new' || str === 'todo' || str.includes('chưa')) return 'text-slate-600 bg-slate-50'
+    if (str === '2' || str === 'investigating' || str === 'fixing' || str === 'in_progress' || str.includes('đang')) return 'text-blue-600 bg-blue-50'
+    if (str === '3' || str === 'review' || str.includes('chờ') || str.includes('duyệt')) return 'text-purple-600 bg-purple-50'
+    if (str === '4' || str === 'resolved' || str === 'done' || str === 'completed' || str.includes('hoàn thành')) return 'text-emerald-600 bg-emerald-50'
+    if (str === '5' || str === 'closed' || str.includes('đóng')) return 'text-slate-500 bg-slate-100'
     return 'text-slate-500 bg-slate-100'
   }
 
-  const getStatusText = (s: string) => {
-    if (s === 'new') return 'Mới phát sinh'
-    if (s === 'investigating') return 'Đang điều tra'
-    if (s === 'fixing') return 'Đang sửa'
-    if (s === 'resolved') return 'Đã khắc phục'
-    return 'Đã đóng'
+  const getStatusText = (s: string | number) => {
+    const str = String(s || '').toLowerCase()
+    if (str === '1' || str === 'new' || str === 'todo' || str.includes('chưa')) return 'Chưa thực hiện'
+    if (str === '2' || str === 'investigating' || str === 'fixing' || str === 'in_progress' || str.includes('đang')) return 'Đang thực hiện'
+    if (str === '3' || str === 'review' || str.includes('chờ') || str.includes('duyệt')) return 'Chờ duyệt'
+    if (str === '4' || str === 'resolved' || str === 'done' || str === 'completed' || str.includes('hoàn thành')) return 'Hoàn thành'
+    if (str === '5' || str === 'closed' || str.includes('đóng')) return 'Đóng'
+    return 'Chưa thực hiện'
   }
 
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      const { error } = await supabase
-        .from('incidents')
-        .update({
-          title: formData.title,
-          description: formData.description,
-          severity: formData.severity,
-          status: formData.status,
-          module: formData.module,
-          reported_by: formData.reported_by || null,
-          assigned_to: formData.assigned_to || null
-        })
-        .eq('id', incident.id)
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(incident.id)
 
-      if (error) throw error
+      if (isUuid && !incident._from_apec) {
+        const checkUuid = (val: any) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val) ? val : null;
+        const { error } = await supabase
+          .from('incidents')
+          .update({
+            title: formData.title,
+            description: formData.description,
+            severity: formData.severity,
+            status: formData.status,
+            module: formData.module,
+            reported_by: checkUuid(formData.reported_by),
+            assigned_to: checkUuid(formData.assigned_to),
+            department_id: checkUuid(formData.department_id)
+          })
+          .eq('id', incident.id)
+
+        if (error) throw error
+      }
+
+      // Đồng bộ trạng thái sang checklist_items
+      if (incident.checklist_item_id && isUuid) {
+        const newItemStatus = formData.status === 'resolved' || formData.status === 'closed' ? 'done' 
+          : formData.status === 'review' ? 'review'
+          : formData.status === 'investigating' || formData.status === 'fixing' || formData.status === 'in_progress' ? 'in_progress' 
+          : 'todo';
+        const newProgress = newItemStatus === 'done' ? 100 : (newItemStatus === 'in_progress' ? 50 : 0);
+        await supabase.from('checklist_items').update({
+          status: newItemStatus,
+          progress: newProgress,
+          is_completed: newItemStatus === 'done',
+          updated_at: new Date().toISOString()
+        }).eq('id', incident.checklist_item_id);
+      }
 
       try {
+        const isCompleted = formData.status === 'resolved' || formData.status === 'closed'
+        const syncProgress = isCompleted ? 100 
+          : (formData.status === 'investigating' || formData.status === 'fixing') ? 50 
+          : 0
         await fetch('/api/v1/apec-global/tasks', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            id: String(incident.id).replace(/^apec_/, ''),
+            id: String(incident.checklist_item_id || incident.id).replace(/^apec_/, ''),
             title: formData.title,
             description: formData.description,
             status: formData.status,
-            is_completed: formData.status === 'resolved' || formData.status === 'closed',
-            process: (formData.status === 'resolved' || formData.status === 'closed') ? 100 : formData.status === 'in_progress' ? 50 : 0,
-            progress: (formData.status === 'resolved' || formData.status === 'closed') ? 100 : formData.status === 'in_progress' ? 50 : 0
+            is_completed: isCompleted,
+            process: syncProgress,
+            progress: syncProgress,
+            reporter_id: formData.reported_by ? String(formData.reported_by).replace(/^apec_/, '') : null,
+            assignee_id: formData.assigned_to ? String(formData.assigned_to).replace(/^apec_/, '') : null
           })
         });
       } catch (apecErr) {
@@ -204,7 +277,9 @@ export function IncidentSlideOver({ incident: initialIncident, members = [], onC
                   <FolderOpen className="w-4 h-4" />
                   <span className="font-medium">Dự án</span>
                 </div>
-                <span className="font-semibold text-slate-800 flex-1">{incident.projectName || incident.projects?.name || 'Nâng cấp App Mobile'}</span>
+                <span className="font-semibold text-slate-800 flex-1">
+                  {incident.projectName || incident.projects?.name || incident.project_name || (incident.apec_sync_metadata?.project_name as string) || 'Chưa xác định'}
+                </span>
               </div>
               
               {isEditing && (
@@ -235,8 +310,24 @@ export function IncidentSlideOver({ incident: initialIncident, members = [], onC
                 <>
                   <div className="flex items-center gap-4 text-[13px]">
                     <div className="w-28 flex items-center gap-2 text-slate-500">
+                      <FolderOpen className="w-4 h-4 text-purple-500" />
+                      <span className="font-medium">Bộ phận</span>
+                    </div>
+                    <select 
+                      value={formData.department_id} 
+                      onChange={e => setFormData({...formData, department_id: e.target.value})}
+                      className="flex-1 font-semibold text-slate-800 border border-slate-200 rounded px-2 py-1 outline-none focus:border-blue-500"
+                    >
+                      <option value="">Chưa phân công</option>
+                      {departments.map(d => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-4 text-[13px]">
+                    <div className="w-28 flex items-center gap-2 text-slate-500">
                       <User className="w-4 h-4" />
-                      <span className="font-medium">Người ghi nhận</span>
+                      <span className="font-medium">Người phát hiện</span>
                     </div>
                     <select 
                       value={formData.reported_by} 
@@ -270,17 +361,30 @@ export function IncidentSlideOver({ incident: initialIncident, members = [], onC
                 <>
                   <div className="flex items-center gap-4 text-[13px]">
                     <div className="w-28 flex items-center gap-2 text-slate-500">
-                      <User className="w-4 h-4" />
-                      <span className="font-medium">Người ghi nhận</span>
+                      <FolderOpen className="w-4 h-4 text-purple-500" />
+                      <span className="font-medium">Bộ phận</span>
                     </div>
-                    <span className="font-semibold text-slate-800 flex-1">{incident.reporter?.full_name || 'Chưa rõ'}</span>
+                    <span className="font-semibold text-slate-800 flex-1">
+                      {departments.find((d: any) => String(d.id) === String(incident.department_id))?.name || 'Chưa phân công'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 text-[13px]">
+                    <div className="w-28 flex items-center gap-2 text-slate-500">
+                      <User className="w-4 h-4" />
+                      <span className="font-medium">Người phát hiện</span>
+                    </div>
+                    <span className="font-semibold text-slate-800 flex-1">
+                      {incident.reporter?.full_name || resolveStaffName(incident.reported_by) || 'Chưa rõ'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-4 text-[13px]">
                     <div className="w-28 flex items-center gap-2 text-slate-500">
                       <User className="w-4 h-4 text-purple-500" />
                       <span className="font-medium">Người thực hiện</span>
                     </div>
-                    <span className="font-semibold text-slate-800 flex-1">{incident.assignee?.full_name || 'Chưa phân công'}</span>
+                    <span className="font-semibold text-slate-800 flex-1">
+                      {incident.assignee?.full_name || resolveStaffName(incident.assigned_to) || 'Chưa phân công'}
+                    </span>
                   </div>
                 </>
               )}
@@ -314,17 +418,9 @@ export function IncidentSlideOver({ incident: initialIncident, members = [], onC
                     <div className="w-28 flex items-center gap-2 text-slate-500">
                       <span className="font-medium">Trạng thái</span>
                     </div>
-                    <select 
-                      value={formData.status} 
-                      onChange={e => setFormData({...formData, status: e.target.value})}
-                      className="flex-1 font-semibold text-slate-800 border border-slate-200 rounded px-2 py-1 outline-none"
-                    >
-                      <option value="new">Mới phát sinh</option>
-                      <option value="investigating">Đang điều tra</option>
-                      <option value="fixing">Đang sửa</option>
-                      <option value="resolved">Đã khắc phục</option>
-                      <option value="closed">Đã đóng</option>
-                    </select>
+                    <span className="flex-1 font-semibold text-slate-800 px-2 py-1">
+                      {getStatusText(formData.status)}
+                    </span>
                   </div>
                 </>
               )}

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { X, Calendar, AlertTriangle, PlayCircle, Trash2, Search, ChevronDown, Check } from 'lucide-react'
 import { customAlert, customConfirm } from '@/utils/alert'
+import { getVietnamDateString } from '@/lib/utils'
 
 const isUuid = (val: any): boolean =>
   typeof val === 'string' &&
@@ -90,8 +91,8 @@ export function ChecklistItemDialog({
           description: itemToEdit.description || itemToEdit.rawApecTask?.description || '',
           department: itemToEdit.department || itemToEdit.department_name || itemToEdit.rawApecTask?.department || '',
           assignee_ids: itemToEdit.assignee_ids || (itemToEdit.assignees ? itemToEdit.assignees.map((a: any) => a.id) : (itemToEdit.assigned_staff_id ? [itemToEdit.assigned_staff_id] : [])),
-          start_date: itemToEdit.start_date ? new Date(itemToEdit.start_date).toISOString().split('T')[0] : '',
-          end_date: itemToEdit.end_date ? new Date(itemToEdit.end_date).toISOString().split('T')[0] : '',
+          start_date: getVietnamDateString(itemToEdit.start_date),
+          end_date: getVietnamDateString(itemToEdit.end_date),
           priority: itemToEdit.priority || 'medium',
           progress: itemToEdit.progress || 0,
           status: itemToEdit.status || 'todo',
@@ -219,8 +220,8 @@ export function ChecklistItemDialog({
             body: JSON.stringify({
               name: payload.title,
               description: formData.description || '',
-              date_start: payload.start_date || new Date().toISOString().split('T')[0],
-              date_end: payload.end_date || new Date().toISOString().split('T')[0],
+              date_start: payload.start_date || getVietnamDateString(),
+              date_end: payload.end_date || getVietnamDateString(),
               type_task: cleanChecklistId,
               project_id: cleanProjectId,
               company_id: cleanCompanyId,

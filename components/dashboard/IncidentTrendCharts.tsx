@@ -6,6 +6,8 @@ import {
 } from 'recharts'
 import { useRouter } from 'next/navigation'
 
+import { VN_TIMEZONE } from '@/lib/utils'
+
 interface IncidentTrendChartsProps {
   incidents: any[]
 }
@@ -22,7 +24,6 @@ export function IncidentTrendCharts({ incidents = [] }: IncidentTrendChartsProps
 
   // 1. Chart 1: Sự cố theo ngày trong tuần (Stacked Bar)
   const weeklyData = useMemo(() => {
-    const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
     const data = [
       { name: 'T2', critical: 0, high: 0, medium: 0, low: 0, sort: 1 },
       { name: 'T3', critical: 0, high: 0, medium: 0, low: 0, sort: 2 },
@@ -33,14 +34,22 @@ export function IncidentTrendCharts({ incidents = [] }: IncidentTrendChartsProps
       { name: 'CN', critical: 0, high: 0, medium: 0, low: 0, sort: 7 },
     ]
 
-    // Get incidents from the last 7 days
+    // Lấy sự cố trong 7 ngày gần nhất
     const now = new Date()
     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
     
     incidents.forEach(inc => {
+      if (!inc.created_at) return
       const d = new Date(inc.created_at)
+      if (isNaN(d.getTime())) return
+
       if (d >= oneWeekAgo) {
-        const dayStr = days[d.getDay()]
+        const dayFormatted = new Intl.DateTimeFormat('vi-VN', {
+          timeZone: VN_TIMEZONE,
+          weekday: 'short',
+        }).format(d)
+        
+        const dayStr = dayFormatted.includes('CN') ? 'CN' : dayFormatted.replace('Th ', 'T').replace('Thứ ', 'T')
         const dayData = data.find(item => item.name === dayStr)
         if (dayData && inc.severity) {
           if (inc.severity === 'critical') dayData.critical++

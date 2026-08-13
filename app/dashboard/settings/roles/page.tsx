@@ -111,7 +111,9 @@ export default function RolesSettingsPage() {
         if (data && data.length > 0) {
           setMembers(data)
         } else {
-          const res = await fetch('/api/staff')
+          const { data: { session } } = await supabase.auth.getSession()
+          const headers = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined
+          const res = await fetch('/api/staff', { headers })
           if (res.ok) {
             const staffData = await res.json()
             if (staffData.accounts) {
@@ -356,23 +358,28 @@ export default function RolesSettingsPage() {
 
   const categoryTranslations: Record<string, string> = {
     'projects': 'Dự án',
+    'project': 'Dự án',
     'tasks': 'Công việc',
+    'task': 'Công việc',
     'incidents': 'Sự cố',
     'improvements': 'Cải tiến',
     'staff': 'Nhân sự',
     'organization': 'Tổ chức',
     'reports': 'Báo cáo',
+    'reporting': 'Báo cáo',
     'settings': 'Hệ thống'
   }
   const actionTranslations: Record<string, string> = {
-    'view': 'Xem chi tiết',
+    'view': 'Xem',
     'create': 'Thêm mới',
     'edit': 'Chỉnh sửa',
     'delete': 'Xóa',
+    'manage': 'Quản lý',
     'import': 'Nhập (Import)',
     'export': 'Xuất (Export)',
     'download': 'Tải xuống',
-    'upload': 'Tải lên'
+    'upload': 'Tải lên',
+    'assign': 'Phân công'
   }
 
   return (
@@ -489,6 +496,7 @@ export default function RolesSettingsPage() {
                       {perms.map(permission => {
                         const action = permission.name.split('_')[0]
                         const displayActionName = actionTranslations[action] || action
+                        const displayLabel = permission.description || displayActionName
                         const hasPerm = isOwnerRole || rolePermissions.some(rp => rp.role_id === activeRoleTab && rp.permission_id === permission.id)
                         
                         return (
@@ -511,8 +519,15 @@ export default function RolesSettingsPage() {
                             >
                               {hasPerm && <Check className="w-3 h-3" />}
                             </div>
-                            <div className="text-sm font-medium text-slate-700">
-                              {displayActionName}
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium text-slate-700 truncate" title={displayLabel}>
+                                {displayActionName}
+                              </div>
+                              {permission.description && (
+                                <div className="text-[10px] text-slate-400 truncate" title={permission.description}>
+                                  {permission.description}
+                                </div>
+                              )}
                             </div>
                           </div>
                         )
@@ -861,3 +876,4 @@ export default function RolesSettingsPage() {
     </div>
   )
 }
+

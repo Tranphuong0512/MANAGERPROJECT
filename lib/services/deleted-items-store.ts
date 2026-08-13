@@ -45,6 +45,7 @@ export function addDeletedItem(id: string | number, name?: string) {
 }
 
 export function isItemDeleted(id: string | number | undefined | null, name?: string): boolean {
+  loadDeletedItems(); // Luôn load lại từ file để tránh khác biệt bộ nhớ giữa các process/chunk
   if (!id && !name) return false;
   if (id) {
     const strId = String(id).trim().toLowerCase();

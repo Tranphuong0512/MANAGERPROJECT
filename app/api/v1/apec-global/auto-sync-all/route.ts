@@ -20,8 +20,7 @@ export async function POST(request: NextRequest) {
     const customSecretKey =
       request.headers.get('x-secret-key') ||
       (await request.json().catch(() => ({}))).secretKey ||
-      process.env.APEC_GLOBAL_SECRET_KEY ||
-      '7LBsS1bIq+0jHWLDRmDktDY36LD0ea7mH2TnHFYzVwc=';
+      process.env.APEC_GLOBAL_SECRET_KEY;
 
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

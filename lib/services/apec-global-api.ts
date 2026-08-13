@@ -4,11 +4,11 @@
  * ============================================================================
  * 
  * BASE_URL: https://api.apecglobal.net
- * Header: X-Secret-Key: 7LBsS1bIq+0jHWLDRmDktDY36LD0ea7mH2TnHFYzVwc=
+ * Header: X-Secret-Key: configured via APEC_GLOBAL_SECRET_KEY
  */
 
 export const APEC_GLOBAL_BASE_URL = 'https://api.apecglobal.net';
-export const APEC_GLOBAL_SECRET_KEY = process.env.APEC_GLOBAL_SECRET_KEY || '7LBsS1bIq+0jHWLDRmDktDY36LD0ea7mH2TnHFYzVwc=';
+export const APEC_GLOBAL_SECRET_KEY = process.env.APEC_GLOBAL_SECRET_KEY || '';
 
 export interface ApecCompany {
   id: string | number;
@@ -113,6 +113,7 @@ export interface ApecQueryParams {
   id?: string | number;
   search?: string;
   limit?: number;
+  page?: number;
 }
 
 function getCandidateEndpoints(baseEndpoint: string): string[] {
@@ -171,11 +172,25 @@ function getCandidateEndpoints(baseEndpoint: string): string[] {
     ];
   }
 
+  let extraKpiCandidates: string[] = [];
+  if (resource === 'kpi-items' || resource === 'kpi_items' || resource === 'kpis' || baseEndpoint.includes('kpi')) {
+    extraKpiCandidates = [
+      '/api/v1/external/kpi-items',
+      '/api/external/kpi-items',
+      '/api/v1/kpi-items',
+      '/api/v1/external/kpis',
+      '/api/v1/kpis',
+      '/api/kpi-items',
+      '/api/kpis',
+    ];
+  }
+
   const candidates = [
     baseEndpoint,                             // /api/v1/externals/companies
     ...extraTasksCandidates,
     ...extraDeptCandidates,
     ...extraTaskTypesCandidates,
+    ...extraKpiCandidates,
     `/api/externals/${resource}`,             // /api/externals/companies
     `/externals/${resource}`,                 // /externals/companies
     `/api/v1/external/${resource}`,           // /api/v1/external/companies
@@ -194,6 +209,9 @@ function getCandidateEndpoints(baseEndpoint: string): string[] {
 // In-memory Circuit Breaker state
 let cbConsecutiveFailures = 0;
 let cbOpenUntil = 0;
+
+// In-memory cache for successful endpoints to avoid 3.5s discovery scan
+const knownEndpoints = new Map<string, string>();
 
 /**
  * Common request fetcher to APEC GLOBAL APIs with auto fallback discovery
@@ -222,7 +240,15 @@ export async function fetchFromApecGlobal<T = any>(
     };
   }
 
-  const candidatePaths = getCandidateEndpoints(endpoint);
+  let candidatePaths = getCandidateEndpoints(endpoint);
+  
+  // Fast path: Try the known working endpoint first if we have one
+  const resourceKey = endpoint.split('/').filter(Boolean).pop() || '';
+  if (knownEndpoints.has(resourceKey)) {
+    const known = knownEndpoints.get(resourceKey)!;
+    candidatePaths = [known, ...candidatePaths.filter(p => p !== known)];
+  }
+
   let lastError = 'Không thể kết nối đến máy chủ APEC GLOBAL';
   let lastStatus = 404;
 
@@ -262,6 +288,9 @@ export async function fetchFromApecGlobal<T = any>(
       if (response.ok) {
         // Reset Circuit Breaker on success
         cbConsecutiveFailures = 0;
+        // Cache this successful endpoint for this resource
+        knownEndpoints.set(resourceKey, candidate);
+        
         return {
           success: true,
           status,
@@ -290,6 +319,7 @@ export async function fetchFromApecGlobal<T = any>(
       cbConsecutiveFailures++;
       if (cbConsecutiveFailures >= 5) {
         cbOpenUntil = Date.now() + 30000;
+        break; // Stop trying candidates if circuit breaker tripped
       }
     }
   }
@@ -524,5 +554,44 @@ export async function getApecAssignments(params?: ApecQueryParams, customSecretK
     ...taskRes,
     items: allAssignments,
     detail: params?.id ? allAssignments.find((x: any) => String(x.id) === String(params.id)) || null : null,
+  };
+}
+
+/**
+ * 8. Lấy Danh sách / Chi tiết Tiêu chí KPI (KPI Items)
+ */
+export async function getApecKpiItems(params?: ApecQueryParams, customSecretKey?: string) {
+  const standardKpiItems = [
+    { id: 47, name: 'Hoàn thành nhiệm vụ (100%)', code: 'TASK_COMPLETE', unit: '%', default_target: 100 },
+    { id: 45, name: 'Doanh thu (Tiền VNĐ)', code: 'REVENUE', unit: 'VNĐ', default_target: 0 },
+    { id: 48, name: 'Chất lượng công việc (100%)', code: 'QUALITY', unit: '%', default_target: 100 },
+    { id: 49, name: 'Xử lý việc phát sinh (Số lần)', code: 'INCIDENT_SOLVE', unit: 'lần', default_target: 1 },
+  ];
+
+  try {
+    const res = await fetchFromApecGlobal<any>(
+      '/api/v1/external/kpi-items',
+      params,
+      customSecretKey
+    );
+    if (res.success && res.data) {
+      const items = extractApecArray<any>(res.data);
+      if (items.length > 0) {
+        return {
+          ...res,
+          items,
+          detail: params?.id ? extractApecDetail<any>(res.data) : null,
+        };
+      }
+    }
+  } catch (err) {
+    // Upstream doesn't support endpoint, use fallback
+  }
+
+  return {
+    success: true,
+    items: standardKpiItems,
+    detail: params?.id ? standardKpiItems.find((x: any) => String(x.id) === String(params.id)) || null : null,
+    status: 200,
   };
 }

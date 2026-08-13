@@ -1,6 +1,9 @@
 'use client'
 
-import { Eye, Edit2, Trash2 } from 'lucide-react'
+import { useMemo } from 'react'
+import { ExternalLink, Trash2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { formatVietnamDate, formatVietnamTime } from '@/lib/utils'
 
 interface IncidentsTableProps {
   incidents: any[]
@@ -13,7 +16,11 @@ interface IncidentsTableProps {
 }
 
 export function IncidentsTable({ incidents, members = [], onIncidentClick, onIncidentUpdate, onDelete, canView = true, canEdit = true }: IncidentsTableProps) {
-  const displayIncidents = incidents
+  const router = useRouter()
+
+  const displayIncidents = useMemo(() => {
+    return [...incidents].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+  }, [incidents])
 
   const getSeverityStyle = (s: string) => {
     if (s === 'critical') return 'text-red-700 bg-red-50 border-red-200'
@@ -29,20 +36,32 @@ export function IncidentsTable({ incidents, members = [], onIncidentClick, onInc
     return '⚪ Thấp'
   }
 
-  const getStatusStyle = (s: string) => {
-    if (s === 'new') return 'text-red-600 bg-red-50 border-red-100'
-    if (s === 'investigating') return 'text-orange-600 bg-orange-50 border-orange-100'
-    if (s === 'fixing') return 'text-blue-600 bg-blue-50 border-blue-100'
-    if (s === 'resolved') return 'text-green-600 bg-green-50 border-green-100'
-    return 'text-slate-500 bg-slate-100 border-slate-200'
+  const getStatusStyle = (s: string | number) => {
+    const str = String(s || '').toLowerCase()
+    if (str === '1' || str === 'new' || str === 'todo' || str.includes('chưa')) return 'text-slate-600 bg-slate-50 border-slate-200'
+    if (str === '2' || str === 'investigating' || str === 'fixing' || str === 'in_progress' || str.includes('đang')) return 'text-blue-600 bg-blue-50 border-blue-200'
+    if (str === '3' || str === 'review' || str.includes('chờ') || str.includes('duyệt')) return 'text-purple-600 bg-purple-50 border-purple-200'
+    if (str === '4' || str === 'resolved' || str === 'done' || str === 'completed' || str === 'implemented' || str.includes('hoàn thành')) return 'text-emerald-700 bg-emerald-50 border-emerald-200'
+    if (str === '5' || str === 'closed' || str === 'rejected' || str.includes('đóng')) return 'text-slate-500 bg-slate-100 border-slate-200'
+    return 'text-slate-600 bg-slate-50 border-slate-200'
   }
 
-  const getStatusText = (s: string) => {
-    if (s === 'new') return 'Mới phát sinh'
-    if (s === 'investigating') return 'Đang điều tra'
-    if (s === 'fixing') return 'Đang sửa'
-    if (s === 'resolved') return 'Đã khắc phục'
-    return 'Đã đóng'
+  const getStatusText = (s: string | number) => {
+    const str = String(s || '').toLowerCase()
+    if (str === '1' || str === 'new' || str === 'todo' || str.includes('chưa')) return 'Chưa thực hiện'
+    if (str === '2' || str === 'investigating' || str === 'fixing' || str === 'in_progress' || str.includes('đang')) return 'Đang thực hiện'
+    if (str === '3' || str === 'review' || str.includes('chờ') || str.includes('duyệt')) return 'Chờ duyệt'
+    if (str === '4' || str === 'resolved' || str === 'done' || str === 'completed' || str === 'implemented' || str.includes('hoàn thành')) return 'Hoàn thành'
+    if (str === '5' || str === 'closed' || str === 'rejected' || str.includes('đóng')) return 'Đóng'
+    return 'Chưa thực hiện'
+  }
+
+  const handleRowClick = (inc: any) => {
+    // Navigate to the project task page
+    const projectId = inc.project_id
+    if (projectId) {
+      router.push(`/dashboard/projects/${projectId}`)
+    }
   }
 
   return (
@@ -54,6 +73,7 @@ export function IncidentsTable({ incidents, members = [], onIncidentClick, onInc
               <th className="px-6 py-4">Mã</th>
               <th className="px-6 py-4">Tiêu đề sự cố</th>
               <th className="px-6 py-4">Dự án</th>
+              <th className="px-6 py-4">Bộ phận</th>
               <th className="px-6 py-4 text-center">Mức độ</th>
               <th className="px-6 py-4 text-center">Trạng thái</th>
               <th className="px-6 py-4">Nhân sự liên quan</th>
@@ -66,10 +86,11 @@ export function IncidentsTable({ incidents, members = [], onIncidentClick, onInc
               <tr 
                 key={inc.id} 
                 className="hover:bg-blue-50/50 transition-colors cursor-pointer group"
-                onClick={() => onIncidentClick(inc)}
+                onClick={() => handleRowClick(inc)}
+                title={inc.project_id ? `Nhấp để xem công việc trong dự án` : 'Chưa liên kết dự án'}
               >
                 <td className="px-6 py-4">
-                  <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{inc.code || `INC-${inc.id.substring(0,3)}`}</span>
+                  <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{inc.code || `INC-${String(inc.id).substring(0,3)}`}</span>
                 </td>
                 <td className="px-6 py-4">
                   <span className="font-bold text-slate-800 group-hover:text-blue-600 transition-colors">{inc.title}</span>
@@ -77,102 +98,57 @@ export function IncidentsTable({ incidents, members = [], onIncidentClick, onInc
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded bg-blue-600 flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0">
-                      {(inc.projectName || inc.projects?.name || 'P').charAt(0)}
+                      {(inc.projectName || inc.projects?.name || inc.project_name || 'P').charAt(0)}
                     </div>
-                    <span className="font-medium text-slate-700">{inc.projectName || inc.projects?.name || 'Dự án'}</span>
+                    <span className="font-medium text-slate-700">{inc.projectName || inc.projects?.name || inc.project_name || 'Chưa xác định'}</span>
                   </div>
                 </td>
-                <td className="px-6 py-4 text-center" onClick={e => e.stopPropagation()}>
-                  {onIncidentUpdate && inc.status !== 'resolved' && inc.status !== 'closed' ? (
-                    <select
-                      value={inc.severity || 'medium'}
-                      onChange={(e) => onIncidentUpdate(inc.id, 'severity', e.target.value)}
-                      className={`px-2 py-1 rounded-lg text-xs font-bold border outline-none cursor-pointer ${getSeverityStyle(inc.severity || 'medium')}`}
-                    >
-                      <option value="critical">Nghiêm trọng</option>
-                      <option value="high">Cao</option>
-                      <option value="medium">Trung bình</option>
-                      <option value="low">Thấp</option>
-                    </select>
-                  ) : (
-                    <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${getSeverityStyle(inc.severity)}`}>
-                      {getSeverityText(inc.severity)}
-                    </span>
-                  )}
+                <td className="px-6 py-4">
+                  <span className="font-medium text-slate-700">{inc.departments?.name || 'Chưa phân công'}</span>
                 </td>
-                <td className="px-6 py-4 text-center" onClick={e => e.stopPropagation()}>
-                  {onIncidentUpdate && inc.status !== 'resolved' && inc.status !== 'closed' ? (
-                    <select
-                      value={inc.status}
-                      onChange={(e) => onIncidentUpdate(inc.id, 'status', e.target.value)}
-                      className={`px-2 py-1 rounded-lg text-xs font-bold border outline-none cursor-pointer ${getStatusStyle(inc.status)}`}
-                    >
-                      <option value="new">Mới phát sinh</option>
-                      <option value="investigating">Đang điều tra</option>
-                      <option value="fixing">Đang sửa</option>
-                      <option value="resolved">Đã khắc phục</option>
-                      <option value="closed">Đã đóng</option>
-                    </select>
-                  ) : (
-                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${getStatusStyle(inc.status)}`}>
-                      {getStatusText(inc.status)}
-                    </span>
-                  )}
+                <td className="px-6 py-4 text-center">
+                  <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${getSeverityStyle(inc.severity)}`}>
+                    {getSeverityText(inc.severity)}
+                  </span>
                 </td>
-                <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
+                <td className="px-6 py-4 text-center">
+                  <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${getStatusStyle(inc.status)}`}>
+                    {getStatusText(inc.status)}
+                  </span>
+                </td>
+                <td className="px-6 py-4">
                   <div className="flex flex-col gap-1.5">
                     <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[9px] font-bold text-slate-600 flex-shrink-0" title="Người báo cáo">
-                        {(inc.reporter?.full_name || 'U').charAt(0)}
+                      <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[9px] font-bold text-slate-600 flex-shrink-0" title="Người phát hiện">
+                        {(inc.reporter?.full_name || inc.reporter_name || 'U').charAt(0)}
                       </div>
-                      <span className="text-[12px] font-medium text-slate-700">{inc.reporter?.full_name || 'Chưa rõ'}</span>
+                      <span className="text-[12px] font-medium text-slate-700">{inc.reporter?.full_name || inc.reporter_name || 'Chưa rõ'}</span>
                     </div>
                     
                     <div className="flex items-center gap-2">
                       <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center text-[9px] font-bold text-purple-600 flex-shrink-0" title="Người thực hiện">
                         {inc.assignee ? inc.assignee.full_name.charAt(0) : '?'}
                       </div>
-                      {onIncidentUpdate && members.length > 0 && inc.status !== 'resolved' && inc.status !== 'closed' ? (
-                        <select
-                          value={inc.assigned_to || ''}
-                          onChange={(e) => onIncidentUpdate(inc.id, 'assigned_to', e.target.value)}
-                          className="text-[12px] font-medium text-purple-700 bg-transparent border-b border-dashed border-purple-300 hover:border-purple-500 outline-none cursor-pointer p-0"
-                        >
-                          <option value="">Chưa phân công</option>
-                          {members.map((m: any) => (
-                            <option key={m.id} value={m.id}>{m.full_name}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-[12px] font-medium text-purple-700">{inc.assignee ? inc.assignee.full_name : 'Chưa phân công'}</span>
-                      )}
+                      <span className="text-[12px] font-medium text-purple-700">{inc.assignee ? inc.assignee.full_name : 'Chưa phân công'}</span>
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <div className="text-xs text-slate-600 font-medium">
-                    {inc.created_at ? new Date(inc.created_at).toLocaleDateString('vi-VN') : '--/--/----'}
+                  <div className="text-xs text-slate-700 font-semibold">
+                    {formatVietnamDate(inc.created_at)}
                   </div>
-                  <div className="text-[10px] text-slate-400">
-                    {inc.created_at ? new Date(inc.created_at).toLocaleTimeString('vi-VN') : ''}
+                  <div className="text-[11px] text-slate-400 font-medium">
+                    {formatVietnamTime(inc.created_at)}
                   </div>
                 </td>
                 <td className="px-6 py-4 text-center" onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {canView && (
+                    {inc.project_id && (
                       <button 
-                        onClick={() => onIncidentClick(inc)}
-                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Xem chi tiết"
+                        onClick={() => handleRowClick(inc)}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Xem công việc trong dự án"
                       >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    )}
-                    {canEdit && (
-                      <button 
-                        onClick={() => onIncidentClick(inc)}
-                        className="p-1.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors" title="Chỉnh sửa"
-                      >
-                        <Edit2 className="w-4 h-4" />
+                        <ExternalLink className="w-4 h-4" />
                       </button>
                     )}
                     {onDelete && (

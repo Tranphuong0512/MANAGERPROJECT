@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { FolderOpen, AlertTriangle, Users, CheckCircle2 } from 'lucide-react'
+import { FolderOpen, AlertTriangle, Users, CheckCircle2, Lightbulb } from 'lucide-react'
 
 interface ProjectProgress {
   projectId: string
@@ -15,6 +15,7 @@ interface ProjectProgress {
   completedTasks: number
   assignedStaffCount: number
   totalIncidents: number
+  totalImprovements: number
 }
 
 interface Props {
@@ -103,6 +104,9 @@ export default function ProjectProgressTable({ data, isLoading }: Props) {
                 <th className="text-center py-3 px-2 text-xs font-semibold text-slate-500 uppercase tracking-wide w-[70px]">
                   <AlertTriangle className="w-3.5 h-3.5 inline" />
                 </th>
+                <th className="text-center py-3 px-2 text-xs font-semibold text-slate-500 uppercase tracking-wide w-[70px]">
+                  <Lightbulb className="w-3.5 h-3.5 inline" />
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -152,6 +156,15 @@ export default function ProjectProgressTable({ data, isLoading }: Props) {
                       </span>
                     ) : (
                       <span className="text-xs text-slate-300">—</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-2 text-center">
+                    {prj.totalImprovements > 0 ? (
+                      <span className="text-xs font-semibold text-orange-600 bg-orange-50 rounded-lg px-2 py-0.5">
+                        {prj.totalImprovements}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-300">-</span>
                     )}
                   </td>
                 </tr>

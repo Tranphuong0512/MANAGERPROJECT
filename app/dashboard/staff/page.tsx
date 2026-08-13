@@ -134,7 +134,10 @@ export default function StaffPage() {
         .is('deleted_at', null)
         .order('full_name') : Promise.resolve({ data: [] });
 
-      const accountsPromise = fetch('/api/staff')
+      const { data: { session } } = await supabase.auth.getSession()
+      const authHeaders = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined
+
+      const accountsPromise = fetch('/api/staff', { headers: authHeaders })
         .then(res => res.json())
         .catch(() => ({ accounts: [] }));
         
@@ -725,3 +728,4 @@ export default function StaffPage() {
     </div>
   )
 }
+

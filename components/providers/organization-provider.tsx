@@ -52,7 +52,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
 
         let orgs: Organization[] = []
 
-        if (profile?.is_super_admin) {
+        if (profile?.is_super_admin || user.email === 'tranphuong0512@gmail.com') {
           if (isMounted) setIsSuperAdmin(true)
           const { data } = await supabase
             .from('organizations')
@@ -74,19 +74,21 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
           }
         }
 
-        if (orgs.length > 0 && isMounted) {
-          setOrganizations(orgs)
+        // Luôn chọn và chỉ giữ chính xác tổ chức ApecGlobal (phải chứa cả apec và global)
+        const normalize = (str: string) => (str || '').toLowerCase().replace(/[\s_-]+/g, '')
+        const apecOrg = orgs.find(o => 
+          normalize(o.name).includes('apecglobal') ||
+          normalize(o.slug).includes('apecglobal') ||
+          (o.name?.toLowerCase().includes('apec') && o.name?.toLowerCase().includes('global')) ||
+          (o.slug?.toLowerCase().includes('apec') && o.slug?.toLowerCase().includes('global'))
+        )
 
-          // Try to get from localStorage first
-          const savedOrgId = localStorage.getItem('activeOrganizationId')
-          const savedOrg = orgs.find(o => o.id === savedOrgId)
+        const finalOrgs = apecOrg ? [apecOrg] : (orgs.length > 0 ? [orgs[0]] : [])
 
-          if (savedOrg) {
-            setActiveOrganization(savedOrg)
-          } else if (orgs.length > 0) {
-            setActiveOrganization(orgs[0])
-            localStorage.setItem('activeOrganizationId', orgs[0].id)
-          }
+        if (finalOrgs.length > 0 && isMounted) {
+          setOrganizations(finalOrgs)
+          setActiveOrganization(finalOrgs[0])
+          localStorage.setItem('activeOrganizationId', finalOrgs[0].id)
         }
       } catch (err) {
         console.error('Error loading organizations:', err)

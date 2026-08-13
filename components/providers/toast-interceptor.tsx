@@ -16,7 +16,18 @@ export function ToastInterceptorProvider({ children }: { children: React.ReactNo
       const method = (init?.method || 'GET').toUpperCase()
       const isMutating = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)
 
-      const response = await originalFetch(input, init)
+      const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.href : input.url)
+
+      let response: Response;
+      try {
+        response = await originalFetch(input, init)
+      } catch (error) {
+        // Network errors, CORS, etc.
+        if (isMutating && !urlStr.includes('/auto-sync-all')) {
+          showToast('error', 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng.', 'LỖI KẾT NỐI');
+        }
+        throw error;
+      }
 
       if (isMutating) {
         const headers = init?.headers ? new Headers(init.headers) : null
@@ -27,8 +38,6 @@ export function ToastInterceptorProvider({ children }: { children: React.ReactNo
         try {
           const clone = response.clone()
           const resJson = await clone.json().catch(() => null)
-          const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.href : input.url)
-
           // Ignore internal sync polling or non-apec noise if needed
           if (urlStr.includes('/auto-sync-all')) {
             return response

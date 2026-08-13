@@ -34,8 +34,22 @@ function getUnpackedPath(relativePath) {
   return path.join(__dirname, relativePath);
 }
 
+function loadEnvVariables() {
+  try {
+    const envPath = getUnpackedPath('.env.local');
+    const fs = require('fs');
+    if (fs.existsSync(envPath)) {
+      require('dotenv').config({ path: envPath });
+      console.log('Loaded .env.local from:', envPath);
+    }
+  } catch (e) {
+    console.error('Failed to load .env.local', e);
+  }
+}
+
 function startNextServer(port) {
   return new Promise((resolve, reject) => {
+    loadEnvVariables();
     const serverScript = getUnpackedPath('server.js');
 
     serverProcess = spawn(process.execPath, [serverScript], {

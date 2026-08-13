@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { X, Calendar, DollarSign, User, AlertTriangle, Type, Activity } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { customAlert, customConfirm } from '@/utils/alert'
+import { getVietnamDateString } from '@/lib/utils'
 
 export function EditProjectDialog({ 
   isOpen, 
@@ -22,8 +23,8 @@ export function EditProjectDialog({
     name: project?.name || '',
     description: project?.description || '',
     status: project?.status || 'planning',
-    start_date: project?.start_date ? new Date(project.start_date).toISOString().split('T')[0] : '',
-    end_date: project?.end_date ? new Date(project.end_date).toISOString().split('T')[0] : '',
+    start_date: getVietnamDateString(project?.start_date),
+    end_date: getVietnamDateString(project?.end_date),
     budget: project?.budget || 0,
     manager_id: project?.manager_id || '',
     priority: project?.priority || 'medium',
@@ -39,8 +40,8 @@ export function EditProjectDialog({
         name: project?.name || '',
         description: project?.description || '',
         status: project?.status || 'planning',
-        start_date: project?.start_date ? new Date(project.start_date).toISOString().split('T')[0] : '',
-        end_date: project?.end_date ? new Date(project.end_date).toISOString().split('T')[0] : '',
+        start_date: getVietnamDateString(project?.start_date),
+        end_date: getVietnamDateString(project?.end_date),
         budget: project?.budget || 0,
         manager_id: project?.manager_id || '',
         priority: project?.priority || 'medium',

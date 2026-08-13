@@ -84,7 +84,7 @@ export function IncidentsBottomWidgets({ incidents = [] }: { incidents?: any[] }
     incidents.forEach(inc => {
       if (!inc.project_id) return;
       
-      const projectName = inc.projects?.name || `Project ${inc.project_id.substring(0, 4)}`;
+      const projectName = inc.project_name || inc.projectName || inc.projects?.name || `Project ${String(inc.project_id).substring(0, 4)}`;
       
       if (!projectsMap.has(inc.project_id)) {
         projectsMap.set(inc.project_id, { name: projectName, total: 0, resolved: 0 });

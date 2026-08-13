@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCachedOrFetch, invalidateCache } from '@/lib/services/server-cache';
-import { addDeletedItem } from '@/lib/services/deleted-items-store';
+import { addDeletedItem, isItemDeleted } from '@/lib/services/deleted-items-store';
+
 import {
   getApecCompanies,
   getApecProjects,
@@ -9,6 +10,7 @@ import {
   getApecDepartments,
   getApecTaskTypes,
   getApecAssignments,
+  getApecKpiItems,
   ApecQueryParams,
 } from '@/lib/services/apec-global-api';
 import {
@@ -18,6 +20,7 @@ import {
   syncTaskTypeOutbound,
   syncTaskOutbound,
   syncAssignmentOutbound,
+  syncTaskApproveOutbound,
 } from '@/lib/services/apec-outbound-sync';
 
 export async function GET(
@@ -29,8 +32,7 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const customSecretKey =
       request.headers.get('x-secret-key') ||
-      process.env.APEC_GLOBAL_SECRET_KEY ||
-      '7LBsS1bIq+0jHWLDRmDktDY36LD0ea7mH2TnHFYzVwc=';
+      process.env.APEC_GLOBAL_SECRET_KEY;
 
     const queryParams: ApecQueryParams = {
       id: searchParams.get('id') || undefined,
@@ -64,7 +66,7 @@ export async function GET(
                 const st = statsMap.get(prjId)!;
                 st.total += 1;
 
-                const taskStatus = t.task_status?.id || t.status?.id || t.status;
+                const taskStatus = t.task_status?.id || (typeof t.status === 'object' && t.status ? t.status?.id : t.status);
                 const statusName = typeof t.status === 'object' ? t.status?.name || '' : String(t.status || '');
                 const isReview = taskStatus === 3 || t.status === 'review' || statusName.toLowerCase().includes('chờ') || statusName.toLowerCase().includes('duyệt');
                 const isDone = !isReview && (taskStatus === 4 || t.status === 'done' || t.status === 'completed' || statusName.toLowerCase().includes('đã duyệt') || statusName.toLowerCase().includes('hoàn thành'));
@@ -105,6 +107,9 @@ export async function GET(
           case 'checklist-items':
           case 'checklist_items':
             res = await getApecTasks(queryParams, customSecretKey);
+            if (Array.isArray(res?.items)) {
+              res.items = res.items.filter((t: any) => !isItemDeleted(t.id, t.name || t.title));
+            }
             break;
           case 'assignments':
           case 'employee_assignments':
@@ -112,10 +117,16 @@ export async function GET(
           case 'jobs':
             res = await getApecAssignments(queryParams, customSecretKey);
             break;
+          case 'kpi-items':
+          case 'kpi_items':
+          case 'kpis':
+          case 'kpi':
+            res = await getApecKpiItems(queryParams, customSecretKey);
+            break;
           default:
             res = {
               success: false,
-              error: `Tài nguyên '${resource}' không hợp lệ. Sử dụng: companies, departments, projects, employees, task-types, tasks, assignments.`,
+              error: `Tài nguyên '${resource}' không hợp lệ. Sử dụng: companies, departments, projects, employees, task-types, tasks, assignments, kpi-items.`,
               status: 400,
             };
             break;
@@ -138,9 +149,14 @@ export async function GET(
       );
     }
 
+    let finalItems = result.items || [];
+    if (resource === 'tasks' || resource === 'checklist-items' || resource === 'checklist_items') {
+      finalItems = finalItems.filter((t: any) => !isItemDeleted(t.id, t.name || t.title));
+    }
+
     return NextResponse.json({
       success: true,
-      items: result.items || [],
+      items: finalItems,
       detail: result.detail || null,
       raw: result.data,
       status: result.status,
@@ -162,8 +178,7 @@ export async function POST(
     const bodyData = await request.json();
     const customSecretKey =
       request.headers.get('x-secret-key') ||
-      process.env.APEC_GLOBAL_SECRET_KEY ||
-      '7LBsS1bIq+0jHWLDRmDktDY36LD0ea7mH2TnHFYzVwc=';
+      process.env.APEC_GLOBAL_SECRET_KEY;
 
     let result;
     switch (resource) {
@@ -221,8 +236,7 @@ export async function PUT(
     const bodyData = await request.json();
     const customSecretKey =
       request.headers.get('x-secret-key') ||
-      process.env.APEC_GLOBAL_SECRET_KEY ||
-      '7LBsS1bIq+0jHWLDRmDktDY36LD0ea7mH2TnHFYzVwc=';
+      process.env.APEC_GLOBAL_SECRET_KEY;
 
     let result;
     switch (resource) {
@@ -231,10 +245,19 @@ export async function PUT(
       case 'task_types':
         result = await syncTaskTypeOutbound('UPDATE', bodyData, 'WEB_CLIENT', customSecretKey);
         break;
+      case 'approve':
+      case 'tasks-approve':
+      case 'tasks_approve':
+        result = await syncTaskApproveOutbound(bodyData.task_assignment_id || bodyData.id, 'WEB_CLIENT', customSecretKey);
+        break;
       case 'tasks':
       case 'checklist-items':
       case 'checklist_items':
-        result = await syncTaskOutbound('UPDATE', bodyData, 'WEB_CLIENT', customSecretKey);
+        if (bodyData.task_assignment_id) {
+          result = await syncTaskApproveOutbound(bodyData.task_assignment_id, 'WEB_CLIENT', customSecretKey);
+        } else {
+          result = await syncTaskOutbound('UPDATE', bodyData, 'WEB_CLIENT', customSecretKey);
+        }
         break;
       case 'assignments':
       case 'employee_assignments':
@@ -280,8 +303,7 @@ export async function PATCH(
     const bodyData = await request.json();
     const customSecretKey =
       request.headers.get('x-secret-key') ||
-      process.env.APEC_GLOBAL_SECRET_KEY ||
-      '7LBsS1bIq+0jHWLDRmDktDY36LD0ea7mH2TnHFYzVwc=';
+      process.env.APEC_GLOBAL_SECRET_KEY;
 
     let result;
     switch (resource) {
@@ -334,8 +356,7 @@ export async function DELETE(
     const bodyData = await request.json();
     const customSecretKey =
       request.headers.get('x-secret-key') ||
-      process.env.APEC_GLOBAL_SECRET_KEY ||
-      '7LBsS1bIq+0jHWLDRmDktDY36LD0ea7mH2TnHFYzVwc=';
+      process.env.APEC_GLOBAL_SECRET_KEY;
 
     let result;
     switch (resource) {

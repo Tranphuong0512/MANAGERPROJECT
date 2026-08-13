@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdminRequest } from '@/lib/admin-route-guard';
 
 /**
  * ============================================================================
@@ -12,6 +13,9 @@ import { createClient } from '@supabase/supabase-js';
  */
 export async function POST(request: NextRequest) {
   try {
+    const adminGuard = await requireAdminRequest(request);
+    if (!adminGuard.authorized) return adminGuard.response;
+
     const body = await request.json().catch(() => ({}));
     const confirmCode = body.confirm;
 
@@ -172,3 +176,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

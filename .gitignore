@@ -14,3 +14,17 @@ node_modules
 .next/
 dist/
 .DS_Store
+# Local generated artifacts and scratch files
+*.tsbuildinfo
+scratch/
+scratch_*
+scratch-*
+*_backup.*
+*.backup
+*.new
+found_replace.txt
+restore_changes.txt
+reverse_replace*.txt
+step_*.txt
+test_payload.ts
+apec_tasks.json

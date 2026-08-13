@@ -2,11 +2,10 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Filter, Bell, ChevronDown, LogOut, Menu, Building2, Globe, Sparkles } from 'lucide-react'
+import { Search, Filter, Bell, ChevronDown, LogOut, Menu, Building2, Sparkles } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { useOrganization } from '@/components/providers/organization-provider'
 import { usePermissions } from '@/hooks/usePermissions'
-import { ApecGlobalSyncDialog } from '@/components/apec-global/apec-global-sync-dialog'
 import { useAutoUpdate } from '@/components/providers/auto-update-provider'
 
 interface HeaderProps {
@@ -27,7 +26,6 @@ export function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [showSearchResults, setShowSearchResults] = useState(false)
-  const [isApecModalOpen, setIsApecModalOpen] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
 
   // Handle click outside to close search results
@@ -116,46 +114,15 @@ export function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="relative group">
-          <div className="flex items-center gap-3 px-3 py-1.5 hover:bg-slate-50 rounded-xl cursor-pointer border border-transparent hover:border-slate-200 transition-all">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">
-              {activeOrganization?.name?.charAt(0) || 'O'}
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-slate-900 leading-tight">
-                {activeOrganization?.name || 'Workspace'}
-              </div>
-              <div className="text-[11px] text-blue-600 font-medium">Workspace</div>
-            </div>
-            <ChevronDown className="w-4 h-4 text-slate-400 ml-1" />
+        <div className="flex items-center gap-3 px-3 py-1.5 rounded-xl border border-slate-100 bg-slate-50/50 select-none">
+          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+            {activeOrganization?.name?.charAt(0) || 'A'}
           </div>
-
-          <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-            <div className="p-2">
-              <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Các tổ chức của bạn
-              </div>
-              <div className="space-y-1 mt-1 max-h-60 overflow-y-auto">
-                {organizations.map((org) => (
-                  <button
-                    key={org.id}
-                    onClick={() => setActiveOrganization(org)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors ${
-                      activeOrganization?.id === org.id 
-                        ? 'bg-blue-50 text-blue-700 font-medium' 
-                        : 'text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className={`w-8 h-8 rounded flex items-center justify-center font-bold ${
-                      activeOrganization?.id === org.id ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-600'
-                    }`}>
-                      {org.name.charAt(0)}
-                    </div>
-                    <span className="truncate">{org.name}</span>
-                  </button>
-                ))}
-              </div>
+          <div>
+            <div className="text-sm font-semibold text-slate-900 leading-tight">
+              {activeOrganization?.name || 'ApecGlobal'}
             </div>
+            <div className="text-[11px] text-blue-600 font-medium">Workspace</div>
           </div>
         </div>
       </div>
@@ -212,23 +179,6 @@ export function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
       <div className="flex items-center justify-end gap-2 w-auto">
         <div className="flex items-center gap-1.5">
           <button
-            onClick={() => setIsApecModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-full text-xs font-semibold shadow-sm hover:shadow transition-all"
-            title="Xem chi tiết kết nối dữ liệu gốc APEC GLOBAL"
-          >
-            <Globe className="w-3.5 h-3.5 animate-pulse" />
-            <span className="hidden md:inline">APEC GLOBAL</span>
-          </button>
-
-          <button
-            onClick={() => window.dispatchEvent(new Event('apec-global-force-sync'))}
-            className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-xs font-bold shadow-sm hover:shadow transition-all"
-            title="Tự động đồng bộ ngay lập tức mọi dữ liệu gốc từ APEC GLOBAL"
-          >
-            <span>⚡ Đồng bộ ngay</span>
-          </button>
-
-          <button
             onClick={() => checkNow(true)}
             disabled={isChecking}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm ${
@@ -244,8 +194,6 @@ export function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
             </span>
           </button>
         </div>
-
-        <ApecGlobalSyncDialog open={isApecModalOpen} onOpenChange={setIsApecModalOpen} />
 
         <button className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-50 rounded-full border border-slate-200 text-sm font-medium transition-colors">
           <Filter className="w-4 h-4" />

@@ -72,22 +72,30 @@ function ProjectCard({ project }: { project: any }) {
         <span className="text-[10px] font-medium text-slate-500">
           {project.code || `PRJ-${project.id.substring(0, 6)}`}
         </span>
-        {(project.incidents?.[0]?.count > 0 || project.improvements?.[0]?.count > 0) && (
-          <div className="flex items-center gap-1.5 ml-auto">
-            {project.incidents?.[0]?.count > 0 && (
-              <span className="flex items-center gap-1 text-[9px] font-bold text-red-600 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded" title={`${project.incidents[0].count} Sự cố`}>
-                <Bug className="w-2.5 h-2.5" />
-                {project.incidents[0].count}
-              </span>
-            )}
-            {project.improvements?.[0]?.count > 0 && (
-              <span className="flex items-center gap-1 text-[9px] font-bold text-orange-600 bg-orange-50 border border-orange-100 px-1.5 py-0.5 rounded" title={`${project.improvements[0].count} Cải tiến`}>
-                <Lightbulb className="w-2.5 h-2.5" />
-                {project.improvements[0].count}
-              </span>
-            )}
-          </div>
-        )}
+        {(() => {
+          const incidentCount = typeof project.incidents === 'number' ? project.incidents : (Array.isArray(project.incidents) ? (project.incidents[0]?.count ?? project.incidents.length) : (project.incidents?.count ?? 0));
+          const improvementCount = typeof project.improvements === 'number' ? project.improvements : (Array.isArray(project.improvements) ? (project.improvements[0]?.count ?? project.improvements.length) : (project.improvements?.count ?? 0));
+          
+          if (incidentCount > 0 || improvementCount > 0) {
+            return (
+              <div className="flex items-center gap-1.5 ml-auto">
+                {incidentCount > 0 && (
+                  <span className="flex items-center gap-1 text-[9px] font-bold text-red-600 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded" title={`${incidentCount} Sự cố`}>
+                    <Bug className="w-2.5 h-2.5" />
+                    {incidentCount}
+                  </span>
+                )}
+                {improvementCount > 0 && (
+                  <span className="flex items-center gap-1 text-[9px] font-bold text-orange-600 bg-orange-50 border border-orange-100 px-1.5 py-0.5 rounded" title={`${improvementCount} Cải tiến`}>
+                    <Lightbulb className="w-2.5 h-2.5" />
+                    {improvementCount}
+                  </span>
+                )}
+              </div>
+            );
+          }
+          return null;
+        })()}
       </div>
 
       <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-3 font-medium">

@@ -69,9 +69,13 @@ export function CreateStaffDialog({
         throw new Error('Vui lòng chọn ít nhất 1 Tổ chức')
       }
 
+      const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/staff', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({
           full_name: formData.full_name,
           organization_ids: formData.organization_ids,
@@ -285,3 +289,4 @@ export function CreateStaffDialog({
     </div>
   )
 }
+

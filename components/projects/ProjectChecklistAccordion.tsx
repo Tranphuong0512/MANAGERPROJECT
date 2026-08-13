@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronRight, Plus, AlertTriangle, User, CalendarDays } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, User, CalendarDays, Bug, Lightbulb } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { CreateChecklistDialog } from './CreateChecklistDialog'
 import { CreateChecklistItemDialog } from './CreateChecklistItemDialog'
@@ -53,13 +53,21 @@ export function ProjectChecklistAccordion({ projectId, organizationId, onProgres
               totalItems++
               if (item.status === 'done' || item.is_completed) completedItems++
 
-              const { count } = await supabase
-                .from('incidents')
-                .select('*', { count: 'exact', head: true })
-                .eq('checklist_item_id', item.id)
-                .is('deleted_at', null)
+              const [{ count: incCount }, { count: impCount }] = await Promise.all([
+                supabase
+                  .from('incidents')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('checklist_item_id', item.id)
+                  .is('deleted_at', null),
+                supabase
+                  .from('improvements')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('checklist_item_id', item.id)
+                  .is('deleted_at', null)
+              ])
               
-              ;(item as any).incidentCount = count || 0
+              ;(item as any).incidentCount = incCount || 0
+              ;(item as any).improvementCount = impCount || 0
             }
           }
         }
@@ -301,8 +309,15 @@ export function ProjectChecklistAccordion({ projectId, organizationId, onProgres
 
                           {item.incidentCount > 0 && (
                             <div className="flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-600 rounded-md text-xs font-bold border border-red-100" title={`${item.incidentCount} sự cố liên quan`}>
-                              <AlertTriangle className="w-3.5 h-3.5" />
-                              {item.incidentCount} lỗi
+                              <Bug className="w-3.5 h-3.5" />
+                              {item.incidentCount} sự cố
+                            </div>
+                          )}
+                          
+                          {item.improvementCount > 0 && (
+                            <div className="flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-600 rounded-md text-xs font-bold border border-orange-100" title={`${item.improvementCount} cải tiến liên quan`}>
+                              <Lightbulb className="w-3.5 h-3.5" />
+                              {item.improvementCount} cải tiến
                             </div>
                           )}
                         </div>

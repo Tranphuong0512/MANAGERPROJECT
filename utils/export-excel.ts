@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client'
-import * as xlsx from 'xlsx'
+import ExcelJS from 'exceljs'
+import { getVietnamDateString } from '@/lib/utils'
 
 export async function exportOrganizationData(orgId: string | null = null, filename: string = 'backup_data') {
   try {
@@ -57,31 +58,44 @@ export async function exportOrganizationData(orgId: string | null = null, filena
     }))
 
     // Create workbook
-    const wb = xlsx.utils.book_new()
+    const workbook = new ExcelJS.Workbook()
     
-    // Add sheets
-    if (orgs && orgs.length > 0) {
-      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(orgs), 'Organizations')
-    }
-    if (flatStaff && flatStaff.length > 0) {
-      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(flatStaff), 'Staff')
-    }
-    if (projects && projects.length > 0) {
-      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(projects), 'Projects')
-    }
-    if (flatTasks && flatTasks.length > 0) {
-      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(flatTasks), 'Tasks')
-    }
-    if (incidents && incidents.length > 0) {
-      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(incidents), 'Incidents')
-    }
-    if (improvements && improvements.length > 0) {
-      xlsx.utils.book_append_sheet(wb, xlsx.utils.json_to_sheet(improvements), 'Improvements')
+    // Helper function to add a sheet
+    const addSheet = (data: any[], sheetName: string) => {
+      if (data && data.length > 0) {
+        const sheet = workbook.addWorksheet(sheetName)
+        const columns = Object.keys(data[0]).map(key => ({
+          header: key,
+          key: key,
+          width: 20
+        }))
+        sheet.columns = columns
+        data.forEach(row => {
+          sheet.addRow(row)
+        })
+      }
     }
 
-    // Export file
-    const dateStr = new Date().toISOString().split('T')[0]
-    xlsx.writeFile(wb, `${filename}_${dateStr}.xlsx`)
+    // Add sheets
+    addSheet(orgs || [], 'Organizations')
+    addSheet(flatStaff || [], 'Staff')
+    addSheet(projects || [], 'Projects')
+    addSheet(flatTasks || [], 'Tasks')
+    addSheet(incidents || [], 'Incidents')
+    addSheet(improvements || [], 'Improvements')
+
+    // Export file for browser download
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = window.URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    
+    const dateStr = getVietnamDateString()
+    anchor.download = `${filename}_${dateStr}.xlsx`
+    anchor.click()
+    
+    window.URL.revokeObjectURL(url)
     
     return { success: true }
   } catch (err: any) {

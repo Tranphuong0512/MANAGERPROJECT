@@ -1,9 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { executeBiDirectionalSync } from '@/lib/services/apec-bi-sync'
+import { requireAdminRequest } from '@/lib/admin-route-guard'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const adminGuard = await requireAdminRequest(request)
+    if (!adminGuard.authorized) return adminGuard.response
+
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -73,8 +77,11 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const adminGuard = await requireAdminRequest(request)
+    if (!adminGuard.authorized) return adminGuard.response
+
     const { email, password, full_name, organization_ids, department_ids, role, phone } = await request.json()
 
     if (!email || !password || !full_name) {
@@ -173,8 +180,11 @@ export async function POST(request: Request) {
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
+    const adminGuard = await requireAdminRequest(request)
+    if (!adminGuard.authorized) return adminGuard.response
+
     const { id, full_name, organization_ids, department_ids, role, phone, email, password } = await request.json()
 
     if (!id || !full_name) {
@@ -292,3 +302,4 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: error.message || 'Lỗi server' }, { status: 500 })
   }
 }
+

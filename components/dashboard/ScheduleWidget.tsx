@@ -4,6 +4,8 @@ import React, { useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
+import { VN_TIMEZONE } from '@/lib/utils'
+
 interface ScheduleWidgetProps {
   tasks: any[]
 }
@@ -16,35 +18,43 @@ export const ScheduleWidget = React.memo(function ScheduleWidget({ tasks }: Sche
   const scheduleData = useMemo(() => {
     if (!tasks || tasks.length === 0) return []
     
-    // Filter tasks that have due_date
+    // Lọc các công việc có due_date và chưa hoàn thành
     const dueTasks = tasks.filter(t => t.due_date && t.status !== 'done')
     
-    // Sort by due_date
+    // Sắp xếp theo due_date tăng dần
     dueTasks.sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
 
-    // Group by date string (DD/MM)
-    const grouped: Record<string, { dateObj: Date, items: any[] }> = {}
+    // Gom nhóm theo ngày hiển thị (DD/MM) theo giờ Việt Nam
+    const grouped: Record<string, { dateObj: Date; dateStr: string; dayName: string; items: any[] }> = {}
     dueTasks.forEach(task => {
       const d = new Date(task.due_date)
-      const key = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`
+      if (isNaN(d.getTime())) return
+
+      const dayFormatted = new Intl.DateTimeFormat('vi-VN', {
+        timeZone: VN_TIMEZONE,
+        weekday: 'short',
+      }).format(d)
+      const dayName = dayFormatted.includes('CN') ? 'CN' : dayFormatted.replace('Th ', 'T').replace('Thứ ', 'T')
+
+      const dateStr = new Intl.DateTimeFormat('en-GB', {
+        timeZone: VN_TIMEZONE,
+        day: '2-digit',
+        month: '2-digit',
+      }).format(d)
+
+      const key = `${dateStr}_${dayName}`
       if (!grouped[key]) {
-        grouped[key] = { dateObj: d, items: [] }
+        grouped[key] = { dateObj: d, dateStr, dayName, items: [] }
       }
       grouped[key].items.push(task)
     })
 
-    const daysOfWeek = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
-
-    // Convert to array and take top 5 upcoming days
-    const result = Object.keys(grouped).map(key => {
-      const g = grouped[key]
-      return {
-        dayName: daysOfWeek[g.dateObj.getDay()],
-        dateStr: key,
-        timestamp: g.dateObj.getTime(),
-        items: g.items
-      }
-    })
+    const result = Object.values(grouped).map(g => ({
+      dayName: g.dayName,
+      dateStr: g.dateStr,
+      timestamp: g.dateObj.getTime(),
+      items: g.items,
+    }))
     
     result.sort((a, b) => a.timestamp - b.timestamp)
     return result.slice(0, 4)

@@ -76,7 +76,7 @@ export default function DashboardPage() {
         // Khởi tạo các promise song song cho dữ liệu độc lập
         const projectsPromise = supabase
           .from('projects')
-          .select('*, tasks(id, status)')
+          .select('*')
           .in('organization_id', orgIds)
           .is('deleted_at', null)
           .order('updated_at', { ascending: false });
@@ -107,23 +107,11 @@ export default function DashboardPage() {
           improvementsCountPromise
         ]);
 
-        const rawProjectsData = projectsRes.data || [];
+        let projectsData = projectsRes.data || [];
         const incidentsData = incidentsRes.data || [];
         const totalStaff = staffCountRes.count || 0;
         const totalImprovements = improvementsCountRes.count || 0;
 
-        const projectsData = rawProjectsData.map((p: any) => {
-          const pTasks = p.tasks || []
-          const totalTasks = pTasks.length
-          const doneTasks = pTasks.filter((t: any) => t.status === 'done').length
-          const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
-          return {
-            ...p,
-            progress_percentage: p.progress_percentage > 0 ? p.progress_percentage : progress
-          }
-        })
-
-        setProjects(projectsData)
         setIncidents(incidentsData)
 
         const projectIds = projectsData.map(p => p.id)
@@ -171,6 +159,20 @@ export default function DashboardPage() {
           }
         }
 
+        if (tasksData.length > 0 || projectIds.length > 0) {
+          projectsData = projectsData.map(p => {
+            const pTasks = tasksData.filter(t => String(t.project_id) === String(p.id))
+            const totalTasks = pTasks.length
+            const doneTasks = pTasks.filter(t => t.status === 'done').length
+            const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
+            return {
+              ...p,
+              progress_percentage: p.progress_percentage > 0 ? p.progress_percentage : progress
+            }
+          })
+        }
+
+        setProjects(projectsData)
         setTasks(tasksData)
         setActivities(activitiesData)
 

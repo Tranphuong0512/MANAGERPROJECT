@@ -40,7 +40,8 @@ export async function GET(request: Request) {
         const [
           { data: projects },
           { data: allTasks },
-          { data: allIncidents }
+          { data: allIncidents },
+          { data: allImprovements }
         ] = await Promise.all([
           supabaseAdmin
             .from('projects')
@@ -61,11 +62,16 @@ export async function GET(request: Request) {
           supabaseAdmin
             .from('incidents')
             .select('id, project_id')
+            .is('deleted_at', null),
+          supabaseAdmin
+            .from('improvements')
+            .select('id, project_id')
             .is('deleted_at', null)
         ]);
 
         const tasksPool = allTasks || [];
         const incidentsPool = allIncidents || [];
+        const improvementsPool = allImprovements || [];
 
         const projectProgress: Array<{
           projectId: string
@@ -79,6 +85,7 @@ export async function GET(request: Request) {
           completedTasks: number
           assignedStaffCount: number
           totalIncidents: number
+          totalImprovements: number
         }> = []
 
         for (const prj of projects || []) {
@@ -109,8 +116,9 @@ export async function GET(request: Request) {
             if (t.assigned_to) staffIds.add(t.assigned_to)
           })
 
-          // Đếm số sự cố trong bộ nhớ
+          // Đếm số sự cố và cải tiến trong bộ nhớ
           const incidentCount = incidentsPool.filter((i: any) => String(i.project_id) === String(prj.id)).length;
+          const improvementCount = improvementsPool.filter((i: any) => String(i.project_id) === String(prj.id)).length;
 
           const progress = totalItems > 0
             ? Math.round((doneItems / totalItems) * 100)
@@ -128,6 +136,7 @@ export async function GET(request: Request) {
             completedTasks,
             assignedStaffCount: staffIds.size,
             totalIncidents: incidentCount || 0,
+            totalImprovements: improvementCount || 0,
           })
         }
 
@@ -145,6 +154,7 @@ export async function GET(request: Request) {
               : 0,
             completedProjects: projectProgress.filter(p => p.progressPercentage >= 100).length,
             totalIncidents: projectProgress.reduce((s, p) => s + p.totalIncidents, 0),
+            totalImprovements: projectProgress.reduce((s, p) => s + p.totalImprovements, 0),
           },
         };
       },

@@ -7,6 +7,7 @@ import {
   TrendingUp, Building2, Users, FolderKanban,
   CheckCircle2, RefreshCw, Database, Zap,
 } from 'lucide-react'
+import { formatVietnamTime } from '@/lib/utils'
 
 // Dynamic imports cho biểu đồ (tránh SSR issues với Recharts)
 const CompanyProgressChart = dynamic(
@@ -107,7 +108,7 @@ export default function AnalyticsPage() {
       if (workloadRes.status === 'success') setEmployeeWorkload(workloadRes.data)
       if (progressRes.status === 'success') setProjectProgress(progressRes.data)
 
-      setLastUpdated(new Date().toLocaleTimeString('vi-VN'))
+      setLastUpdated(formatVietnamTime(new Date()))
     } catch (err) {
       console.error('Error loading analytics:', err)
     } finally {

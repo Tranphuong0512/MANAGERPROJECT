@@ -1,8 +1,43 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { X, Lightbulb } from 'lucide-react'
+import { generateUUID, getVietnamDateString } from '@/lib/utils'
+import { X, Sparkles, Calendar, Users, Briefcase, Target, Building2, AlertTriangle, FileText } from 'lucide-react'
+
+// Hàm kiểm tra UUID
+const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+
+const toNumericId = (value: any): number | undefined => {
+  if (value === null || value === undefined || value === '') return undefined
+  const cleaned = String(value).replace(/^(apec_|prj_|p-)/i, '')
+  const n = Number(cleaned)
+  return Number.isFinite(n) && n > 0 ? n : undefined
+}
+
+const normalizeName = (value: any) => String(value || '').trim().toLowerCase()
+
+const getEmployeeDepartment = (employee: any) => {
+  if (!employee) return null
+  const department = employee.department && typeof employee.department === 'object' ? employee.department : null
+  const id = toNumericId(
+    department?.id ||
+    employee.department_id ||
+    employee.dept_id ||
+    employee.department?.department_id
+  )
+  const name =
+    department?.name ||
+    employee.department_name ||
+    employee.dept_name ||
+    (typeof employee.department === 'string' ? employee.department : '')
+
+  if (!id && !name) return null
+  return {
+    id: id ? String(id) : '',
+    name: name || `Phòng ban #${id}`,
+  }
+}
 
 interface CreateImprovementDialogProps {
   open: boolean
@@ -26,121 +61,294 @@ export function CreateImprovementDialog({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
+  // Dữ liệu cho các dropdown
+  const [departments, setDepartments] = useState<any[]>([])
+  const [employees, setEmployees] = useState<any[]>([])
+  const [kpiItems, setKpiItems] = useState<any[]>([])
+  const [taskTypes, setTaskTypes] = useState<any[]>([])
+
+  // Danh sách project nội bộ đã lưu
+  const [localProjects, setLocalProjects] = useState<any[]>([])
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    module: '',
     impact_level: 'medium',
+    status: 'new', // internal status
     project_id: projectId || '',
     checklist_item_id: '',
     assigned_to: '',
     reporter_id: '',
+    
+    // APEC Global specific fields
+    department_id: '',
+    start_date: getVietnamDateString(),
+    end_date: getVietnamDateString(),
+    task_status: 2, // 1: Mới, 2: Đang thực hiện, 4: Hoàn thành, 5: Đóng
+    kpi_item_id: 47,
+    target_value: 100,
+    min_count_reject: 2,
+    max_count_reject: 3,
+    type_id: '',
   })
 
-  const [checklistItems, setChecklistItems] = useState<any[]>([])
+  const selectableProjects = useMemo(() => {
+    const byId = new Map<string, any>()
+    const byName = new Map<string, any>()
 
+    for (const project of [...localProjects, ...projects]) {
+      const id = String(project.id)
+      const existingById = byId.get(id)
+      const merged = { ...(existingById || {}), ...project }
+      byId.set(id, merged)
+
+      const nameKey = normalizeName(project.name)
+      if (nameKey) {
+        const existingByName = byName.get(nameKey)
+        byName.set(nameKey, { ...(existingByName || {}), ...merged })
+      }
+    }
+
+    return Array.from(byId.values()).map((project) => {
+      const nameMatch = byName.get(normalizeName(project.name))
+      return {
+        ...nameMatch,
+        ...project,
+        apec_id: project.apec_id || nameMatch?.apec_id || (project._from_apec ? toNumericId(project.id) : undefined),
+      }
+    })
+  }, [localProjects, projects])
+
+  const selectedEmployee = useMemo(
+    () => employees.find((employee: any) => String(employee.id) === String(formData.assigned_to)),
+    [employees, formData.assigned_to]
+  )
+
+  const selectedEmployeeDepartment = useMemo(() => {
+    const department = getEmployeeDepartment(selectedEmployee)
+    if (!department || department.id) return department
+
+    const matchedDepartment = departments.find((d: any) => normalizeName(d.name || d.department_name) === normalizeName(department.name))
+    return matchedDepartment
+      ? { id: String(matchedDepartment.id), name: matchedDepartment.name || matchedDepartment.department_name }
+      : department
+  }, [selectedEmployee, departments])
+
+  const visibleDepartments = selectedEmployeeDepartment ? [selectedEmployeeDepartment] : []
+
+  // Pre-load data từ local Supabase & APEC API
   useEffect(() => {
     if (open) {
-      setFormData(prev => ({ ...prev, project_id: projectId || '', assigned_to: '', reporter_id: '' }))
+      setFormData(prev => ({ ...prev, project_id: projectId || '', assigned_to: '', reporter_id: '', department_id: '' }))
+      loadDropdownData()
     }
   }, [open, projectId])
 
-  // Load checklist items when project changes
-  useEffect(() => {
-    const loadChecklistItems = async () => {
-      if (!formData.project_id) {
-        setChecklistItems([])
-        return
+  const loadDropdownData = async () => {
+    try {
+      // 1. Projects
+      const { data: projs } = await supabase.from('projects').select('id, name, apec_id, organization_id')
+      if (projs) setLocalProjects(projs)
+
+      // 2. Fetch từ APEC Global API endpoint
+      const depsRes = await fetch('/api/v1/apec-global/departments')
+      if (depsRes.ok) {
+        const depsJson = await depsRes.json()
+        setDepartments(depsJson.items || depsJson || [])
       }
 
-      const { data } = await supabase
-        .from('checklist_items')
-        .select('id, title, project_checklists!inner(project_id, title)')
-        .eq('project_checklists.project_id', formData.project_id)
-        .is('deleted_at', null)
-        .order('title')
-      
-      setChecklistItems(data || [])
-    }
+      // Employees
+      const empRes = await fetch('/api/v1/apec-global/employees')
+      if (empRes.ok) {
+        const empJson = await empRes.json()
+        setEmployees(empJson.items || empJson || [])
+      }
 
-    loadChecklistItems()
-  }, [formData.project_id])
+      // Task Types
+      const typeRes = await fetch('/api/v1/apec-global/task-types')
+      if (typeRes.ok) {
+        const typeJson = await typeRes.json()
+        setTaskTypes(typeJson.items || typeJson || [])
+      }
+
+      // APEC Projects
+      const apecProjRes = await fetch('/api/v1/apec-global/projects')
+      if (apecProjRes.ok) {
+        const apecProjJson = await apecProjRes.json()
+        const apecProjs = (apecProjJson.items || []).map((p: any) => ({ id: String(p.id), apec_id: Number(p.id), name: p.name || p.project_name, _from_apec: true }))
+        setLocalProjects(prev => {
+          const existingIds = new Set(prev.map((p: any) => String(p.id)))
+          const newOnes = apecProjs.filter((p: any) => !existingIds.has(p.id))
+          return [...prev, ...newOnes]
+        })
+      }
+
+      // KPI Items
+      setKpiItems([
+        { id: 47, name: 'Hoàn thành nhiệm vụ' },
+        { id: 48, name: 'Khắc phục sự cố' },
+        { id: 45, name: 'Doanh thu' }
+      ])
+    } catch (err) {
+      console.warn('Không thể tải dữ liệu dropdown APEC:', err)
+    }
+  }
+
+  const customAlert = (msg: string) => {
+    const el = document.createElement('div')
+    el.className = 'fixed top-4 right-4 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl z-[9999] font-medium transform transition-all translate-y-[-20px] opacity-0 flex items-center gap-3'
+    el.innerHTML = `<div class="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>${msg}`
+    document.body.appendChild(el)
+    setTimeout(() => {
+      el.style.transform = 'translateY(0)'
+      el.style.opacity = '1'
+    }, 10)
+    setTimeout(() => {
+      el.style.transform = 'translateY(-20px)'
+      el.style.opacity = '0'
+      setTimeout(() => el.remove(), 300)
+    }, 3000)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setIsLoading(true)
-
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) throw new Error('Chưa đăng nhập')
-      const user = session.user
-      
-      if (!formData.project_id) {
-        throw new Error('Vui lòng chọn dự án liên quan.')
+      if (!formData.title?.trim()) throw new Error('Vui lòng nhập tên / tiêu đề đề xuất cải tiến.')
+      if (!formData.project_id) throw new Error('Vui lòng chọn dự án liên quan.')
+      if (!formData.assigned_to) throw new Error('Vui lòng chọn người chịu trách nhiệm để tự xác định phòng ban xử lý.')
+
+      // Tìm đúng dự án đã chọn và lấy ID dự án trên APEC
+      const selectedProj = selectableProjects.find((p: any) =>
+        String(p.id) === String(formData.project_id) ||
+        String(p.apec_id || '') === String(formData.project_id) ||
+        (!isUuid(formData.project_id) && String(p.id) === String(toNumericId(formData.project_id)))
+      )
+      const apecProjectId = toNumericId(selectedProj?.apec_id || (!isUuid(formData.project_id) ? formData.project_id : undefined))
+
+      if (!apecProjectId) {
+        throw new Error('Dự án đã chọn chưa có ID APEC hợp lệ. Vui lòng đồng bộ dự án này với APEC trước khi tạo đề xuất.')
       }
 
-      if (!formData.title) throw new Error('Vui lòng nhập đề xuất cải tiến')
-
-      // Get org id of the selected project
-      let targetOrgId = organizationId
-      const selectedProject = projects.find(p => p.id === formData.project_id)
-      if (selectedProject?.organization_id) {
-        targetOrgId = selectedProject.organization_id
-      } else if (!targetOrgId) {
-        // Fetch from DB
-        const { data: projData } = await supabase
-          .from('projects')
-          .select('organization_id')
-          .eq('id', formData.project_id)
-          .single()
-        targetOrgId = projData?.organization_id || ''
+      const employeeDepartment = selectedEmployeeDepartment
+      const resolvedDepartmentId = toNumericId(employeeDepartment?.id)
+      if (!resolvedDepartmentId) {
+        throw new Error('Nhân viên được chọn chưa có phòng ban APEC hợp lệ. Vui lòng cập nhật phòng ban cho nhân viên trước khi tạo đề xuất.')
       }
 
-      if (!targetOrgId) throw new Error('Không tìm thấy tổ chức của dự án')
+      // 1. Xác định Người Đề Xuất (Reporter)
+      const { data: { user } } = await supabase.auth.getUser()
+      let reporterId = formData.reporter_id
+      let reporterName = ''
+      if (reporterId) {
+        const matchedEmp = employees.find((e: any) => String(e.id) === String(reporterId))
+        reporterName = matchedEmp ? (matchedEmp.name || matchedEmp.full_name) : ''
+      } else if (user) {
+        reporterId = user.id
+        reporterName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Tôi'
+      }
 
-      // Insert improvement
-      const { error: insertError } = await supabase
-        .from('improvements')
-        .insert({
-          project_id: formData.project_id,
-          organization_id: targetOrgId,
-          checklist_item_id: formData.checklist_item_id || null,
-          title: formData.title,
-          description: formData.description,
-          module: formData.module,
-          impact_level: formData.impact_level,
-          status: 'pending',
-          reporter_id: formData.reporter_id || user.id
-        } as any)
+      // Đính kèm metadata Người đề xuất vào mô tả
+      const formattedDescription = reporterName 
+        ? `${formData.description || ''}${formData.description ? '\n' : ''}[Người đề xuất: ${reporterName}]`
+        : (formData.description || '')
 
-      if (insertError) throw insertError
+      // 2. TẠO TASK TRÊN APEC GLOBAL (Checklist: CẢI TIẾN & NÂNG CẤP)
+      const taskId = generateUUID()
 
-      // Log activity
-      await supabase.from('project_activities').insert({
-        project_id: formData.project_id,
-        user_id: user.id,
-        action_type: 'create_improvement',
-        description: `Đã đề xuất cải tiến: ${formData.title}`
+      const cleanEmp = formData.assigned_to ? [Number(formData.assigned_to)].filter(n => !isNaN(n) && n > 0) : []
+      const fallbackEmp = cleanEmp.length > 0 ? cleanEmp : (employees.length > 0 ? [Number(employees[0].id)].filter(n => !isNaN(n) && n > 0) : [37])
+
+      const apecPayload = {
+        id: taskId,
+        name: formData.title,
+        title: formData.title,
+        description: formattedDescription,
+        project_id: apecProjectId,
+        checklist_id: null,
+        type_name: 'CẢI TIẾN & NÂNG CẤP',
+        type_task: 'CẢI TIẾN & NÂNG CẤP',
+        is_incident: false,
+        date_start: formData.start_date || new Date().toISOString().split("T")[0],
+        date_end: formData.end_date || new Date().toISOString().split("T")[0],
+        end_date: formData.end_date || null,
+        employees: fallbackEmp.length > 0 ? fallbackEmp : [37],
+        assignee_id: formData.assigned_to || null,
+        department_id: resolvedDepartmentId || null,
+        min_count_reject: Number(formData.min_count_reject || 2),
+        max_count_reject: Number(formData.max_count_reject || 3),
+        kpi_item_id: Number(formData.kpi_item_id || 47),
+        target_value: Number(formData.target_value || 100),
+        is_completed: Number(formData.task_status) === 4,
+        status: Number(formData.task_status || 2),
+        task_status: Number(formData.task_status || 2),
+        process: Number(formData.task_status) === 4 ? 100 : (Number(formData.task_status) === 2 ? 50 : 0),
+        priority: formData.impact_level === "high" ? 3 : (formData.impact_level === "low" ? 1 : 2)
+      }
+
+      const apecRes = await fetch("/api/v1/apec-global/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(apecPayload)
       })
-
-      // Reset form
-      setFormData({
-        title: '',
-        description: '',
-        module: '',
-        impact_level: 'medium',
-        project_id: projectId || '',
-        checklist_item_id: '',
-        assigned_to: '',
-        reporter_id: '',
-      })
+      const apecJson = await apecRes.json().catch(() => ({}))
       
+      // 3. LƯU DỮ LIỆU CẢI TIẾN VÀO SUPABASE (Nếu tìm được project UUID hợp lệ)
+      try {
+        const supabaseProj = localProjects.find(
+          (lp: any) => isUuid(String(lp.id)) && (
+            String(lp.id) === String(formData.project_id) ||
+            String(lp.apec_id) === String(apecProjectId) ||
+            lp.name?.toLowerCase().trim() === selectedProj?.name?.toLowerCase().trim()
+          )
+        ) || localProjects.find((lp: any) => isUuid(String(lp.id)))
+
+        const validProjectId = supabaseProj?.id && isUuid(String(supabaseProj.id)) ? String(supabaseProj.id) : null
+        const validOrgId = organizationId && isUuid(String(organizationId)) 
+          ? String(organizationId) 
+          : (supabaseProj?.organization_id && isUuid(String(supabaseProj.organization_id)) ? String(supabaseProj.organization_id) : null)
+
+        if (validProjectId && validOrgId) {
+          const improvementId = isUuid(taskId) ? taskId : generateUUID()
+          await supabase.from('improvements').insert({
+            id: improvementId,
+            title: formData.title,
+            description: formattedDescription,
+            impact_level: formData.impact_level || 'medium',
+            status: formData.status || 'new',
+            project_id: validProjectId,
+            organization_id: validOrgId,
+            checklist_item_id: String(taskId),
+            reporter_id: isUuid(String(reporterId)) ? String(reporterId) : (user?.id && isUuid(user.id) ? user.id : null),
+            assigned_to: isUuid(String(formData.assigned_to)) ? String(formData.assigned_to) : null,
+            created_at: new Date().toISOString()
+          })
+        }
+      } catch (errSupabase) {
+        console.warn('Bỏ qua lỗi lưu Supabase improvements phụ trợ:', errSupabase)
+      }
+
+      if (apecRes.ok && apecJson && apecJson.success !== false) {
+        customAlert("✅ Khởi tạo đề xuất cải tiến thành công trên máy chủ APEC GLOBAL!")
+      } else if (apecJson?.error) {
+        console.warn("APEC Global sync error:", apecJson.error)
+        customAlert("⚠️ Lỗi từ APEC: " + apecJson.error)
+      } else {
+        customAlert("✅ Ghi nhận đề xuất cải tiến thành công!")
+      }
+
+      // Reset & close
+      setFormData({ 
+        title: '', description: '', impact_level: 'medium', status: 'new', project_id: projectId || '', 
+        checklist_item_id: '', assigned_to: '', reporter_id: '',
+        department_id: '', start_date: getVietnamDateString(), end_date: getVietnamDateString(),
+        task_status: 2, kpi_item_id: 47, target_value: 100, min_count_reject: 2, max_count_reject: 3, type_id: ''
+      })
       onOpenChange(false)
-      if (onSaved) onSaved()
+      onSaved?.()
     } catch (err: any) {
-      console.error(err)
-      setError(err.message || 'Thêm cải tiến thất bại')
+      setError(err.message || 'Ghi nhận đề xuất cải tiến thất bại')
     } finally {
       setIsLoading(false)
     }
@@ -149,139 +357,241 @@ export function CreateImprovementDialog({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden border border-slate-200">
-        <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-purple-50">
-          <h2 className="font-bold text-purple-900 flex items-center gap-2">
-            <Lightbulb className="w-5 h-5 text-purple-600" /> Đề xuất cải tiến
-          </h2>
-          <button onClick={() => onOpenChange(false)} className="p-1 hover:bg-purple-100 rounded-lg transition-colors text-purple-500">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-200">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-gradient-to-r from-purple-50/50 via-white to-blue-50/50 sticky top-0 z-10">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-purple-100/80 text-purple-600 shadow-inner">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Đề xuất cải tiến & nâng cấp</h2>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">Tự động cấu hình và đẩy dữ liệu sang máy chủ APEC Global (Checklist: CẢI TIẾN & NÂNG CẤP)</p>
+            </div>
+          </div>
+          <button onClick={() => onOpenChange(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400 hover:text-slate-600">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm font-medium">
-              {error}
+            <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm font-medium flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <p>{error}</p>
             </div>
           )}
 
-          {/* Only show project selector when projects list is provided */}
-          {projects.length > 0 && (
-            <div className="col-span-2">
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Dự án liên quan *</label>
-              <select
-                value={formData.project_id}
-                onChange={e => setFormData({ ...formData, project_id: e.target.value, checklist_item_id: '' })}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-purple-500 outline-none transition-all"
-                required
-              >
-                <option value="">-- Chọn dự án --</option>
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Công việc / Đầu việc liên quan</label>
-              <select
-                value={formData.checklist_item_id}
-                onChange={e => setFormData({ ...formData, checklist_item_id: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-purple-500 outline-none transition-all"
-                disabled={!formData.project_id || checklistItems.length === 0}
-              >
-                <option value="">-- Không chỉ định --</option>
-                {checklistItems.map(item => (
-                  <option key={item.id} value={item.id}>
-                    {item.project_checklists?.title} {'>'} {item.title}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Core Info */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
+              <FileText className="w-4 h-4 text-slate-400" /> Thông tin cơ bản
+            </h3>
             
-            {members.length > 0 && (
-              <div className="col-span-2">
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Người đề xuất cải tiến</label>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Dự án liên quan *</label>
                 <select
-                  value={formData.reporter_id}
-                  onChange={e => setFormData({ ...formData, reporter_id: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-purple-500 outline-none transition-all"
+                  value={formData.project_id}
+                  onChange={(e) => setFormData({ ...formData, project_id: e.target.value })}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm bg-slate-50 hover:bg-white transition-colors"
+                  required
                 >
-                  <option value="">-- Mặc định: tôi --</option>
-                  {members.map((m: any) => (
-                    <option key={m.user_id || m.id} value={m.user_id || m.id}>
-                      {m.profiles?.full_name || m.full_name || 'Không rõ'}
-                    </option>
+                  <option value="">Chọn dự án...</option>
+                  {selectableProjects.map((p: any) => (
+                    <option key={`${p.id}-${p.apec_id || ''}`} value={p.id}>{p.name}</option>
                   ))}
                 </select>
               </div>
-            )}
+              
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Phòng ban xử lý</label>
+                <div className="relative">
+                  <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <select
+                    value={selectedEmployeeDepartment?.id || ''}
+                    disabled
+                    className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-100 text-slate-600 cursor-not-allowed"
+                  >
+                    <option value="">{formData.assigned_to ? 'Nhân viên này chưa có phòng ban' : 'Chọn người thực hiện trước'}</option>
+                    {visibleDepartments.map((d: any) => (
+                      <option key={d.id || d.name} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
 
-            <div className="col-span-2">
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Nội dung cải tiến *</label>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Tiêu đề đề xuất cải tiến *</label>
               <input
                 type="text"
                 value={formData.title}
-                onChange={e => setFormData({ ...formData, title: e.target.value })}
-                placeholder="VD: Tối ưu hoá câu truy vấn dữ liệu..."
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-purple-500 outline-none transition-all"
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                placeholder="Ví dụ: Tối ưu tốc độ tải trang / Tự động hóa quy trình báo cáo..."
                 required
               />
             </div>
 
-            <div className="col-span-2">
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Mô tả chi tiết</label>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Mô tả chi tiết giải pháp</label>
               <textarea
                 value={formData.description}
-                onChange={e => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Mô tả lý do và cách cải tiến..."
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-purple-500 outline-none transition-all resize-none h-24"
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                placeholder="Mô tả chi tiết hiện trạng, phương án cải tiến và hiệu quả mong đợi..."
+                rows={3}
               />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Module / Component</label>
-              <input
-                type="text"
-                value={formData.module}
-                onChange={e => setFormData({ ...formData, module: e.target.value })}
-                placeholder="VD: Authentication"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-purple-500 outline-none transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Mức độ tác động</label>
-              <select
-                value={formData.impact_level}
-                onChange={e => setFormData({ ...formData, impact_level: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-purple-500 outline-none transition-all"
-              >
-                <option value="high">🔴 Tác động lớn</option>
-                <option value="medium">🟠 Tác động vừa</option>
-                <option value="low">⚪ Tác động nhỏ</option>
-              </select>
             </div>
           </div>
 
+          {/* Assignments */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
+              <Users className="w-4 h-4 text-slate-400" /> Giao việc & Phân công
+            </h3>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Người chịu trách nhiệm thực hiện (Assignee)</label>
+                <select
+                  value={formData.assigned_to}
+                  onChange={(e) => {
+                    const employee = employees.find((m: any) => String(m.id) === e.target.value)
+                    const department = getEmployeeDepartment(employee)
+                    setFormData({ ...formData, assigned_to: e.target.value, department_id: department?.id || '' })
+                  }}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm bg-slate-50"
+                >
+                  <option value="">-- Chọn nhân viên APEC --</option>
+                  {employees.map((m: any) => (
+                    <option key={m.id} value={m.id}>{m.name || m.full_name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Người đề xuất</label>
+                <select
+                  value={formData.reporter_id}
+                  onChange={(e) => setFormData({ ...formData, reporter_id: e.target.value })}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm bg-slate-50"
+                >
+                  <option value="">-- Mặc định: Tôi --</option>
+                  {employees.map((m: any) => (
+                    <option key={m.id} value={m.id}>{m.name || m.full_name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Ngày bắt đầu</label>
+                <div className="relative">
+                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="date"
+                    value={formData.start_date}
+                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                    className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 bg-slate-50"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Ngày kết thúc (Hạn chót)</label>
+                <div className="relative">
+                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="date"
+                    value={formData.end_date}
+                    onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                    className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 bg-slate-50"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Mức độ tác động & Trạng thái */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
+              <Target className="w-4 h-4 text-slate-400" /> Tác động & Trạng thái
+            </h3>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Mức độ tác động</label>
+                <select
+                  value={formData.impact_level}
+                  onChange={(e) => setFormData({ ...formData, impact_level: e.target.value })}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm bg-slate-50 font-medium"
+                >
+                  <option value="high">🟠 Cao</option>
+                  <option value="medium">🟡 Trung bình</option>
+                  <option value="low">⚪ Thấp</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Trạng thái ban đầu</label>
+                <select
+                  value={formData.task_status}
+                  onChange={(e) => setFormData({ ...formData, task_status: Number(e.target.value) })}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm bg-slate-50 font-medium"
+                >
+                  <option value={1}>⚪ Chưa thực hiện</option>
+                  <option value={2}>🔵 Đang thực hiện</option>
+                  <option value={3}>🟣 Chờ duyệt</option>
+                  <option value={4}>🟢 Hoàn thành</option>
+                  <option value={5}>⚫ Đóng</option>
+                </select>
+              </div>
+            </div>
+
+            {/* KPI Items Setup cố định */}
+            <div className="p-4 bg-purple-50/60 rounded-xl border border-purple-100 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                  <Target className="w-4 h-4 text-purple-600" /> Chỉ tiêu KPI áp dụng:
+                </span>
+                <span className="text-xs font-extrabold text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
+                  Target: 100%
+                </span>
+              </div>
+              <div className="text-xs font-medium text-purple-800 bg-white/80 p-2.5 rounded-lg border border-purple-200 flex items-center justify-between">
+                <span>Hoàn thành nhiệm vụ</span>
+                <span className="text-[11px] text-purple-600 font-bold">100%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Buttons */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              className="px-5 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
             >
-              Hủy bỏ
+              Hủy
             </button>
             <button
               type="submit"
               disabled={isLoading}
-              className="px-4 py-2 text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl transition-colors flex items-center gap-2"
+              className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-purple-200 disabled:opacity-50 flex items-center gap-2"
             >
-              {isLoading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
-              Tạo đề xuất
+              {isLoading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Đang ghi nhận...
+                </>
+              ) : (
+                'Ghi nhận Đề xuất'
+              )}
             </button>
           </div>
         </form>

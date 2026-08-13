@@ -24,8 +24,11 @@ export function ImprovementSlideOver({ improvement: initialImprovement, members 
     status: '',
     module: '',
     reporter_id: '',
-    assigned_to: ''
+    assigned_to: '',
+    department_id: ''
   })
+
+  const [departments, setDepartments] = useState<any[]>([])
 
   useEffect(() => {
     if (initialImprovement) {
@@ -37,9 +40,17 @@ export function ImprovementSlideOver({ improvement: initialImprovement, members 
         status: initialImprovement.status || 'pending',
         module: initialImprovement.module || '',
         reporter_id: initialImprovement.reporter_id || '',
-        assigned_to: initialImprovement.assigned_to || ''
+        assigned_to: initialImprovement.assigned_to || '',
+        department_id: initialImprovement.department_id || ''
       })
       setIsEditing(false)
+
+      const loadDepartments = async () => {
+        if (!initialImprovement.organization_id) return
+        const { data } = await supabase.from('departments').select('id, name').eq('organization_id', initialImprovement.organization_id).order('name')
+        setDepartments(data || [])
+      }
+      loadDepartments()
     } else {
       setImprovement(null)
     }
@@ -59,20 +70,24 @@ export function ImprovementSlideOver({ improvement: initialImprovement, members 
     return '⚪ Thấp'
   }
 
-  const getStatusStyle = (s: string) => {
-    if (s === 'pending') return 'text-slate-600 bg-slate-50'
-    if (s === 'in_progress') return 'text-blue-600 bg-blue-50'
-    if (s === 'implemented') return 'text-green-600 bg-green-50'
-    if (s === 'rejected') return 'text-red-600 bg-red-50'
+  const getStatusStyle = (s: string | number) => {
+    const str = String(s || '').toLowerCase()
+    if (str === '1' || str === 'pending' || str === 'todo' || str.includes('chưa')) return 'text-slate-600 bg-slate-50'
+    if (str === '2' || str === 'in_progress' || str === 'evaluating' || str.includes('đang')) return 'text-blue-600 bg-blue-50'
+    if (str === '3' || str === 'review' || str.includes('chờ') || str.includes('duyệt')) return 'text-purple-600 bg-purple-50'
+    if (str === '4' || str === 'implemented' || str === 'done' || str === 'approved' || str.includes('hoàn thành')) return 'text-emerald-600 bg-emerald-50'
+    if (str === '5' || str === 'rejected' || str === 'closed' || str.includes('đóng')) return 'text-slate-500 bg-slate-100'
     return 'text-slate-500 bg-slate-100'
   }
 
-  const getStatusText = (s: string) => {
-    if (s === 'pending') return 'Chờ duyệt'
-    if (s === 'in_progress') return 'Đang thực hiện'
-    if (s === 'implemented') return 'Đã áp dụng'
-    if (s === 'rejected') return 'Từ chối'
-    return 'Không rõ'
+  const getStatusText = (s: string | number) => {
+    const str = String(s || '').toLowerCase()
+    if (str === '1' || str === 'pending' || str === 'todo' || str.includes('chưa')) return 'Chưa thực hiện'
+    if (str === '2' || str === 'in_progress' || str === 'evaluating' || str.includes('đang')) return 'Đang thực hiện'
+    if (str === '3' || str === 'review' || str.includes('chờ') || str.includes('duyệt')) return 'Chờ duyệt'
+    if (str === '4' || str === 'implemented' || str === 'done' || str === 'approved' || str.includes('hoàn thành')) return 'Hoàn thành'
+    if (str === '5' || str === 'rejected' || str === 'closed' || str.includes('đóng')) return 'Đóng'
+    return 'Chưa thực hiện'
   }
 
   const handleSave = async () => {
@@ -87,11 +102,26 @@ export function ImprovementSlideOver({ improvement: initialImprovement, members 
           status: formData.status,
           module: formData.module,
           reporter_id: formData.reporter_id || null,
-          assigned_to: formData.assigned_to || null
+          assigned_to: formData.assigned_to || null,
+          department_id: formData.department_id || null
         })
         .eq('id', improvement.id)
 
       if (error) throw error
+
+      if (improvement.checklist_item_id) {
+        const newItemStatus = formData.status === 'implemented' ? 'done'
+          : formData.status === 'in_progress' ? 'in_progress'
+          : formData.status === 'rejected' ? 'todo'
+          : 'todo';
+        const newProgress = newItemStatus === 'done' ? 100 : (newItemStatus === 'in_progress' ? 50 : 0);
+        await supabase.from('checklist_items').update({
+          status: newItemStatus,
+          progress: newProgress,
+          is_completed: newItemStatus === 'done',
+          updated_at: new Date().toISOString()
+        }).eq('id', improvement.checklist_item_id);
+      }
 
       try {
         await fetch('/api/v1/apec-global/tasks', {
@@ -202,7 +232,9 @@ export function ImprovementSlideOver({ improvement: initialImprovement, members 
                   <FolderOpen className="w-4 h-4" />
                   <span className="font-medium">Dự án</span>
                 </div>
-                <span className="font-semibold text-slate-800 flex-1">{improvement.projectName || improvement.projects?.name || 'Nâng cấp App Mobile'}</span>
+                <span className="font-semibold text-slate-800 flex-1">
+                  {improvement.projectName || improvement.projects?.name || improvement.project_name || (improvement.apec_sync_metadata?.project_name as string) || 'Chưa xác định'}
+                </span>
               </div>
 
               {isEditing && (
@@ -231,6 +263,22 @@ export function ImprovementSlideOver({ improvement: initialImprovement, members 
               
               {isEditing ? (
                 <>
+                  <div className="flex items-center gap-4 text-[13px]">
+                    <div className="w-28 flex items-center gap-2 text-slate-500">
+                      <FolderOpen className="w-4 h-4 text-purple-500" />
+                      <span className="font-medium">Bộ phận</span>
+                    </div>
+                    <select 
+                      value={formData.department_id} 
+                      onChange={e => setFormData({...formData, department_id: e.target.value})}
+                      className="flex-1 font-semibold text-slate-800 border border-slate-200 rounded px-2 py-1 outline-none focus:border-blue-500"
+                    >
+                      <option value="">Chưa phân công</option>
+                      {departments.map(d => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="flex items-center gap-4 text-[13px]">
                     <div className="w-28 flex items-center gap-2 text-slate-500">
                       <User className="w-4 h-4" />
@@ -266,6 +314,15 @@ export function ImprovementSlideOver({ improvement: initialImprovement, members 
                 </>
               ) : (
                 <>
+                  <div className="flex items-center gap-4 text-[13px]">
+                    <div className="w-28 flex items-center gap-2 text-slate-500">
+                      <FolderOpen className="w-4 h-4 text-purple-500" />
+                      <span className="font-medium">Bộ phận</span>
+                    </div>
+                    <span className="font-semibold text-slate-800 flex-1">
+                      {departments.find(d => d.id === improvement.department_id)?.name || 'Chưa phân công'}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-4 text-[13px]">
                     <div className="w-28 flex items-center gap-2 text-slate-500">
                       <User className="w-4 h-4" />

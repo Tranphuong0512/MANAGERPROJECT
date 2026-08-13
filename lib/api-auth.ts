@@ -21,7 +21,7 @@ export async function authenticateApiRequest(request: NextRequest): Promise<ApiA
   // The default getSupabaseClient() creates a client that looks for cookies.
   // We need an admin client to look up the api key from DB safely.
 
-  const supabase = getSupabaseClient()
+  const supabase = await getSupabaseClient()
 
   // 1. Try x-api-key header first
   const apiKey = request.headers.get('x-api-key') || request.headers.get('apikey')

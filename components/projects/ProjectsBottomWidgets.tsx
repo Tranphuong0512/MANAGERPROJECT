@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useOrganization } from '@/components/providers/organization-provider'
+import { VN_TIMEZONE, getVietnamTimeAgo } from '@/lib/utils'
 
 export function ProjectsBottomWidgets() {
   const { activeOrganization } = useOrganization()
@@ -79,12 +80,18 @@ export function ProjectsBottomWidgets() {
 
   // Process Deadline
   const getWeekDeadlines = () => {
-    const today = new Date()
-    const nextWeek = new Date()
-    nextWeek.setDate(today.getDate() + 7)
+    const now = new Date()
+    // Lấy mốc 0h00 hôm nay theo giờ VN
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: VN_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+    const todayMidnight = new Date(`${todayStr}T00:00:00+07:00`)
+    const nextWeek = new Date(todayMidnight.getTime() + 7 * 24 * 60 * 60 * 1000)
     
     return tasks
-      .filter(t => t.due_date && new Date(t.due_date) >= today && new Date(t.due_date) <= nextWeek)
+      .filter(t => {
+        if (!t.due_date) return false
+        const d = new Date(t.due_date)
+        return !isNaN(d.getTime()) && d >= todayMidnight && d <= nextWeek
+      })
       .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
       .slice(0, 4)
   }
@@ -93,28 +100,38 @@ export function ProjectsBottomWidgets() {
   // Helpers
   const formatShortDate = (d: string) => {
     if (!d) return '--/--'
-    const date = new Date(d)
-    return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`
+    try {
+      const date = new Date(d)
+      if (isNaN(date.getTime())) return '--/--'
+      return new Intl.DateTimeFormat('en-GB', {
+        timeZone: VN_TIMEZONE,
+        day: '2-digit',
+        month: '2-digit',
+      }).format(date)
+    } catch {
+      return '--/--'
+    }
   }
   const getDayOfWeek = (d: string) => {
     if (!d) return ''
-    const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
-    return days[new Date(d).getDay()]
+    try {
+      const date = new Date(d)
+      if (isNaN(date.getTime())) return ''
+      const dayFormatted = new Intl.DateTimeFormat('vi-VN', {
+        timeZone: VN_TIMEZONE,
+        weekday: 'short',
+      }).format(date)
+      return dayFormatted.includes('CN') ? 'CN' : dayFormatted.replace('Th ', 'T').replace('Thứ ', 'T')
+    } catch {
+      return ''
+    }
   }
   const getInitials = (name: string) => {
     if (!name) return 'U'
     return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
   }
   const timeAgo = (dateStr: string) => {
-    if (!dateStr) return ''
-    const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000)
-    if (seconds < 60) return 'Vừa xong'
-    const minutes = Math.floor(seconds / 60)
-    if (minutes < 60) return `${minutes} phút trước`
-    const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours} giờ trước`
-    const days = Math.floor(hours / 24)
-    return `${days} ngày trước`
+    return getVietnamTimeAgo(dateStr)
   }
 
   // Action mapping

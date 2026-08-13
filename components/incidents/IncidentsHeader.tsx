@@ -73,24 +73,13 @@ export function IncidentsHeader({
           onChange={(e) => setStatusFilter(e.target.value)}
           className="px-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 outline-none focus:border-blue-500"
         >
-          <option value="active">Đang mở (Loại trừ Đã đóng/khắc phục)</option>
+          <option value="active">Đang xử lý (Đang thực hiện + Chờ duyệt)</option>
           <option value="all">Tất cả trạng thái</option>
-          {activeTab === 'incidents' ? (
-            <>
-              <option value="new">Mới phát sinh</option>
-              <option value="investigating">Đang điều tra</option>
-              <option value="fixing">Đang sửa</option>
-              <option value="resolved">Đã khắc phục</option>
-              <option value="closed">Đã đóng</option>
-            </>
-          ) : (
-            <>
-              <option value="pending">Chờ duyệt</option>
-              <option value="in_progress">Đang thực hiện</option>
-              <option value="implemented">Đã áp dụng</option>
-              <option value="rejected">Từ chối</option>
-            </>
-          )}
+          <option value="new">Chưa thực hiện</option>
+          <option value="in_progress">Đang thực hiện</option>
+          <option value="review">Chờ duyệt</option>
+          <option value="done">Hoàn thành</option>
+          <option value="closed">Đóng</option>
         </select>
 
         <select 

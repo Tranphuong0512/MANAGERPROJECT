@@ -43,13 +43,10 @@ try {
   
   fs.writeFileSync(standalonePkgPath, JSON.stringify(standalonePkg, null, 2));
 
-  // Also copy .env.local
-  if (fs.existsSync(path.join(__dirname, '.env.local'))) {
-    fs.copyFileSync(path.join(__dirname, '.env.local'), path.join(__dirname, '.next', 'standalone', '.env.local'));
-  }
 
   console.log('Standalone preparation complete!');
 } catch (err) {
   console.error('Error copying files:', err);
   process.exit(1);
 }
+
