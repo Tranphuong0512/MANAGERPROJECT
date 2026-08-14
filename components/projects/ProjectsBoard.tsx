@@ -10,6 +10,7 @@ import { MoreHorizontal, Calendar, Users, AlertTriangle, Bug, Lightbulb } from '
 interface ProjectsBoardProps {
   projects: any[]
   onStatusChange: (projectId: string, newStatus: string) => void
+  canEdit?: boolean
 }
 
 const STATUS_COLUMNS = [
@@ -19,10 +20,11 @@ const STATUS_COLUMNS = [
   { id: 'completed', title: 'Hoàn thành', color: 'border-green-200 bg-green-50 text-green-700' }
 ]
 
-function ProjectCard({ project }: { project: any }) {
+function ProjectCard({ project, canEdit = false }: { project: any; canEdit?: boolean }) {
   const router = useRouter()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: project.id,
+    disabled: !canEdit,
     data: {
       type: 'Project',
       project
@@ -51,10 +53,10 @@ function ProjectCard({ project }: { project: any }) {
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
+      {...(canEdit ? attributes : {})}
+      {...(canEdit ? listeners : {})}
       onClick={() => router.push(`/dashboard/projects/${project.id}`)}
-      className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group relative"
+      className={`bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all group relative ${canEdit ? 'cursor-grab' : 'cursor-pointer'}`}
     >
       <div className="flex items-start justify-between mb-2 gap-2">
         <h4 className="font-bold text-slate-800 text-sm line-clamp-2 leading-tight group-hover:text-blue-600 transition-colors">
@@ -136,7 +138,7 @@ function ProjectCard({ project }: { project: any }) {
 
 import { useDroppable } from '@dnd-kit/core'
 
-function Column({ col, projects }: { col: any, projects: any[] }) {
+function Column({ col, projects, canEdit = false }: { col: any; projects: any[]; canEdit?: boolean }) {
   const { setNodeRef } = useDroppable({
     id: col.id,
     data: {
@@ -155,7 +157,7 @@ function Column({ col, projects }: { col: any, projects: any[] }) {
       <div ref={setNodeRef} className="p-3 flex-1 flex flex-col gap-3">
         <SortableContext items={projects.map(p => p.id)} strategy={verticalListSortingStrategy}>
           {projects.map(p => (
-            <ProjectCard key={p.id} project={p} />
+            <ProjectCard key={p.id} project={p} canEdit={canEdit} />
           ))}
         </SortableContext>
       </div>
@@ -163,7 +165,7 @@ function Column({ col, projects }: { col: any, projects: any[] }) {
   )
 }
 
-export function ProjectsBoard({ projects, onStatusChange }: ProjectsBoardProps) {
+export function ProjectsBoard({ projects, onStatusChange, canEdit = false }: ProjectsBoardProps) {
   const [activeProject, setActiveProject] = useState<any | null>(null)
   
   const sensors = useSensors(
@@ -172,12 +174,14 @@ export function ProjectsBoard({ projects, onStatusChange }: ProjectsBoardProps) 
   )
 
   const handleDragStart = (event: DragStartEvent) => {
+    if (!canEdit) return
     const { active } = event
     const project = projects.find(p => p.id === active.id)
     setActiveProject(project || null)
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
+    if (!canEdit) return
     const { active, over } = event
     setActiveProject(null)
 
@@ -215,7 +219,7 @@ export function ProjectsBoard({ projects, onStatusChange }: ProjectsBoardProps) 
 
   return (
     <DndContext 
-      sensors={sensors} 
+      sensors={canEdit ? sensors : []} 
       collisionDetection={closestCorners}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
@@ -224,13 +228,13 @@ export function ProjectsBoard({ projects, onStatusChange }: ProjectsBoardProps) 
         {STATUS_COLUMNS.map(col => {
           const colProjects = projects.filter(p => getColumnStatus(p.status) === col.id)
           return (
-            <Column key={col.id} col={col} projects={colProjects} />
+            <Column key={col.id} col={col} projects={colProjects} canEdit={canEdit} />
           )
         })}
       </div>
 
       <DragOverlay>
-        {activeProject ? <ProjectCard project={activeProject} /> : null}
+        {activeProject ? <ProjectCard project={activeProject} canEdit={canEdit} /> : null}
       </DragOverlay>
     </DndContext>
   )

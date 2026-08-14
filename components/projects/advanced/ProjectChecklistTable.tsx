@@ -11,8 +11,9 @@ import { CSS } from '@dnd-kit/utilities'
 import { CreateChecklistDialog } from '../CreateChecklistDialog'
 import { ChecklistItemDialog } from '../ChecklistItemDialog'
 import { ImportProjectDataDialog } from '../ImportProjectDataDialog'
-import { customAlert, customConfirm } from '@/utils/alert'
 import { getVietnamMonthBounds } from '@/lib/utils'
+import { usePermissions } from '@/hooks/usePermissions'
+import { customAlert, customConfirm } from '@/utils/alert'
 
 const isUuid = (str: any) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
@@ -55,6 +56,11 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
   const [isSubtasksOpen, setIsSubtasksOpen] = useState(false)
   const [isAssigneesOpen, setIsAssigneesOpen] = useState(false)
   
+  const { hasPermission } = usePermissions()
+  const canEditTask = hasPermission('edit_tasks')
+  const canDeleteTask = hasPermission('delete_tasks')
+  const canCreateTask = hasPermission('create_tasks')
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -89,8 +95,9 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
     return (
       <select 
         value={value}
+        disabled={!canEditTask}
         onChange={(e) => onStatusChange(item, e.target.value)}
-        className={`px-2 py-0.5 rounded text-[10px] font-bold border outline-none cursor-pointer hover:opacity-80 transition-opacity ${colorClasses}`}
+        className={`px-2 py-0.5 rounded text-[10px] font-bold border outline-none transition-opacity ${colorClasses} ${!canEditTask ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:opacity-80'}`}
       >
         <option value="todo" className="text-slate-900 bg-white">Chưa bắt đầu</option>
         <option value="in_progress" className="text-slate-900 bg-white">Đang thực hiện</option>
@@ -117,14 +124,19 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
     >
       <div className="flex items-center gap-3 p-3">
         {/* Drag handle */}
-        <div {...attributes} {...listeners} className="cursor-grab p-1 text-slate-300 hover:text-slate-500">
-          <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor">
-            <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z" />
-          </svg>
-        </div>
+        {canEditTask ? (
+          <div {...attributes} {...listeners} className="cursor-grab p-1 text-slate-300 hover:text-slate-500">
+            <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor">
+              <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z" />
+            </svg>
+          </div>
+        ) : (
+          <div className="w-[24px]" />
+        )}
 
         <div className="flex-1 min-w-[200px] flex items-start gap-2 pt-1">
           <button 
+            disabled={!canEditTask}
             onClick={() => {
               const current = item.status || 'todo';
               const nextStatus = current === 'todo' ? 'in_progress' : 
@@ -132,8 +144,8 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
                                  current === 'review' ? 'done' : 'todo';
               onStatusChange(item, nextStatus);
             }} 
-            className="mt-0.5 flex-shrink-0"
-            title="Nhấn để đổi trạng thái"
+            className={`mt-0.5 flex-shrink-0 ${!canEditTask ? 'cursor-not-allowed opacity-70' : ''}`}
+            title={canEditTask ? "Nhấn để đổi trạng thái" : "Không có quyền sửa đổi"}
           >
             {item.status === 'done' || item.is_completed ? (
               <div className="w-4 h-4 rounded bg-emerald-500 flex items-center justify-center transition-colors shadow-sm">
@@ -311,14 +323,15 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
         <div className="w-28 shrink-0">
           <input
             type="date"
+            disabled={!canEditTask}
             value={item.end_date ? String(item.end_date).split('T')[0] : ''}
             onChange={(e) => {
               e.stopPropagation();
               onDateChange(item, e.target.value);
             }}
             onClick={(e) => e.stopPropagation()}
-            className="px-1.5 py-1 text-xs font-medium text-slate-700 bg-transparent hover:bg-slate-100 border border-transparent hover:border-slate-300 rounded cursor-pointer transition-all outline-none"
-            title="Thao tác ngày giờ cập nhật lên server Apec Global"
+            className={`px-1.5 py-1 text-xs font-medium text-slate-700 bg-transparent rounded transition-all outline-none border border-transparent ${!canEditTask ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-slate-100 hover:border-slate-300'}`}
+            title={canEditTask ? "Thao tác ngày giờ cập nhật lên server Apec Global" : "Không có quyền sửa đổi"}
           />
         </div>
 
@@ -337,13 +350,14 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
           </div>
           <select
             value={item.progress || 0}
+            disabled={!canEditTask}
             onChange={(e) => {
               e.stopPropagation();
               onProgressChange(item, Number(e.target.value));
             }}
             onClick={(e) => e.stopPropagation()}
-            className="text-[11px] font-bold text-slate-700 bg-white border border-slate-200 hover:border-blue-400 rounded px-1 py-0.5 cursor-pointer outline-none transition-colors"
-            title="Thao tác tiến độ cập nhật lên server Apec Global"
+            className={`text-[11px] font-bold text-slate-700 bg-white border border-slate-200 rounded px-1 py-0.5 outline-none transition-colors ${!canEditTask ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:border-blue-400'}`}
+            title={canEditTask ? "Thao tác tiến độ cập nhật lên server Apec Global" : "Không có quyền sửa đổi"}
           >
             <option value={0}>0%</option>
             <option value={10}>10%</option>
@@ -365,6 +379,7 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
             return (
               <button
                 type="button"
+                disabled={!canEditTask}
                 onClick={(e) => {
                   e.stopPropagation();
                   onApproveAll?.(item, !isApproved);
@@ -373,8 +388,8 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
                   isApproved
                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200'
                     : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20'
-                }`}
-                title={isApproved ? 'Đã duyệt công việc (Nhấp để hủy duyệt)' : 'Duyệt công việc & tự động chuyển trạng thái Hoàn thành'}
+                } ${!canEditTask ? 'cursor-not-allowed opacity-60 bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-100' : ''}`}
+                title={canEditTask ? (isApproved ? 'Đã duyệt công việc (Nhấp để hủy duyệt)' : 'Duyệt công việc & tự động chuyển trạng thái Hoàn thành') : 'Không có quyền duyệt công việc'}
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>{isApproved ? 'Đã duyệt' : 'Duyệt'}</span>
@@ -383,30 +398,32 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
           })()}
         </div>
 
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button 
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEditClick(item);
-            }} 
-            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-            title="Chuyển sang Checklist khác / Chỉnh sửa công việc"
-          >
-            <ArrowRightLeft className="w-4 h-4 text-blue-500" />
-          </button>
-          <button 
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEditClick(item);
-            }} 
-            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors"
-            title="Chỉnh sửa công việc"
-          >
-            <MoreVertical className="w-4 h-4" />
-          </button>
-        </div>
+        {canEditTask && (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button 
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditClick(item);
+              }} 
+              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Chuyển sang Checklist khác / Chỉnh sửa công việc"
+            >
+              <ArrowRightLeft className="w-4 h-4 text-blue-500" />
+            </button>
+            <button 
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditClick(item);
+              }} 
+              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors"
+              title="Chỉnh sửa công việc"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* --- DANH SÁCH CÔNG VIỆC CON XỔ XUỐNG --- */}
@@ -417,36 +434,38 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
               <CornerDownRight className="w-4 h-4 text-blue-600" />
               Danh sách công việc con ({subtasks.length} hạng mục)
             </span>
-            <button
-              type="button"
-              onClick={async (e) => {
-                e.stopPropagation();
-                const subTitle = window.prompt('Nhập tên công việc con:');
-                if (!subTitle?.trim()) return;
-                
-                try {
-                  const assigneeId = item.assignees?.[0]?.raw_id || null;
-                  const res = await fetch('/api/v1/apec-global/assignments', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      task_id: String(item.id).replace(/^apec_/, ''),
-                      name: subTitle.trim(),
-                      process: 0,
-                      status: { name: 'Chưa thực hiện', id: 1 },
-                      employee_id: assigneeId
-                    }),
-                  });
-                  if (!res.ok) throw new Error('Không thể tạo công việc con');
-                  if (onSubtaskChange) onSubtaskChange(item.id, null, { action: 'reload' });
-                } catch (err: any) {
-                  alert(err.message || 'Lỗi khi tạo công việc con');
-                }
-              }}
-              className="flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
-            >
-              <Plus className="w-3 h-3" /> Thêm công việc con
-            </button>
+            {canCreateTask && (
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const subTitle = window.prompt('Nhập tên công việc con:');
+                  if (!subTitle?.trim()) return;
+                  
+                  try {
+                    const assigneeId = item.assignees?.[0]?.raw_id || null;
+                    const res = await fetch('/api/v1/apec-global/assignments', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        task_id: String(item.id).replace(/^apec_/, ''),
+                        name: subTitle.trim(),
+                        process: 0,
+                        status: { name: 'Chưa thực hiện', id: 1 },
+                        employee_id: assigneeId
+                      }),
+                    });
+                    if (!res.ok) throw new Error('Không thể tạo công việc con');
+                    if (onSubtaskChange) onSubtaskChange(item.id, null, { action: 'reload' });
+                  } catch (err: any) {
+                    alert(err.message || 'Lỗi khi tạo công việc con');
+                  }
+                }}
+                className="flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
+              >
+                <Plus className="w-3 h-3" /> Thêm công việc con
+              </button>
+            )}
           </div>
           {subtasks.length === 0 ? (
             <div className="text-center py-4 text-xs text-slate-500 italic bg-white rounded-xl border border-slate-200 p-4">
@@ -469,6 +488,7 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
                     <span className="text-xs font-bold text-slate-400 w-6 shrink-0">#{idx + 1}</span>
                     <input
                       type="checkbox"
+                      disabled={!canEditTask}
                       checked={sub.checked || Number(sub.process || sub.progress) >= 100}
                       onChange={(e) => {
                         const checked = e.target.checked;
@@ -479,12 +499,13 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
                           status: checked ? { name: 'Hoàn thành' } : { name: 'Đang thực hiện' }
                         });
                       }}
-                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
-                      title="Hoàn thành công việc con (Cập nhật server Apec Global)"
+                      className={`w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 shrink-0 ${!canEditTask ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
+                      title={canEditTask ? "Hoàn thành công việc con (Cập nhật server Apec Global)" : "Không có quyền sửa đổi"}
                     />
                     {/* Nút DUYỆT TỪNG SUBTASK */}
                     <button
                       type="button"
+                      disabled={!canEditTask}
                       onClick={(e) => {
                         e.stopPropagation();
                         const newChecked = !(sub.checked || Number(sub.process || sub.progress) >= 100);
@@ -499,11 +520,11 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
                         Boolean(sub.checked)
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200 shadow-2xs'
                           : 'bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 shadow-2xs'
-                      }`}
+                      } ${!canEditTask ? 'cursor-not-allowed opacity-60 bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-100' : ''}`}
                       title={
-                        Boolean(sub.checked)
-                          ? 'Đã duyệt (checked = true). Nhấp để hủy duyệt'
-                          : 'Chưa duyệt (checked = false). Nhấp để Duyệt (checked = true) và chuyển trạng thái Hoàn thành'
+                        canEditTask 
+                          ? (Boolean(sub.checked) ? 'Đã duyệt (checked = true). Nhấp để hủy duyệt' : 'Chưa duyệt (checked = false). Nhấp để Duyệt (checked = true) và chuyển trạng thái Hoàn thành')
+                          : 'Không có quyền duyệt công việc'
                       }
                     >
                       <CheckCircle2 className="w-3 h-3" />
@@ -553,10 +574,11 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
                   <div className="w-28 shrink-0">
                     <input
                       type="date"
+                      disabled={!canEditTask}
                       value={sub.completed_date || sub.end_date || sub.due_date ? String(sub.completed_date || sub.end_date || sub.due_date).split('T')[0] : ''}
                       onChange={(e) => onSubtaskChange?.(item, idx, { completed_date: e.target.value, end_date: e.target.value })}
-                      className="px-1.5 py-0.5 text-xs font-medium text-slate-700 bg-transparent hover:bg-slate-100 border border-transparent hover:border-slate-300 rounded cursor-pointer transition-all outline-none"
-                      title="Cập nhật hạn hoàn thành công việc con lên Apec Global"
+                      className={`px-1.5 py-0.5 text-xs font-medium text-slate-700 bg-transparent rounded transition-all outline-none border border-transparent ${!canEditTask ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-slate-100 hover:border-slate-300'}`}
+                      title={canEditTask ? "Cập nhật hạn hoàn thành công việc con lên Apec Global" : "Không có quyền sửa đổi"}
                     />
                   </div>
 
@@ -593,6 +615,7 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
                       return (
                         <select
                           value={displayStatus}
+                          disabled={!canEditTask}
                           onChange={(e) => {
                             const val = e.target.value;
                             const proc = val === 'done' ? 100 : val === 'review' ? 90 : val === 'in_progress' ? 50 : 0;
@@ -603,7 +626,7 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
                               status: { name: val === 'done' ? 'Hoàn thành' : val === 'review' ? 'Chờ duyệt' : val === 'in_progress' ? 'Đang thực hiện' : 'Chưa thực hiện' }
                             });
                           }}
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold border outline-none cursor-pointer ${colorCls}`}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border outline-none transition-opacity ${colorCls} ${!canEditTask ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
                         >
                           <option value="todo" className="text-slate-900 bg-white">Chưa bắt đầu</option>
                           <option value="in_progress" className="text-slate-900 bg-white">Đang xử lý</option>
@@ -618,16 +641,17 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
                   <div className="w-24 shrink-0 flex items-center gap-1.5">
                     <select
                       value={Number(sub.process || sub.progress) || 0}
+                      disabled={!canEditTask}
                       onChange={(e) => {
                         const proc = Number(e.target.value);
                         onSubtaskChange?.(item, idx, {
                           process: proc,
                           progress: proc,
-                          checked: proc >= 100
+                          checked: sub.checked || false
                         });
                       }}
-                      className="text-[11px] font-bold text-slate-700 bg-white border border-slate-200 hover:border-blue-400 rounded px-1 py-0.5 cursor-pointer outline-none"
-                      title="Cập nhật tiến độ công việc con lên Apec Global"
+                      className={`text-[11px] font-bold text-slate-700 bg-white border border-slate-200 rounded px-1 py-0.5 outline-none transition-all ${!canEditTask ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:border-blue-400'}`}
+                      title={canEditTask ? "Cập nhật tiến độ công việc con lên Apec Global" : "Không có quyền sửa đổi"}
                     >
                       <option value={0}>0%</option>
                       <option value={10}>10%</option>
@@ -670,6 +694,10 @@ function SortableChecklistCard({ list, children }: { list: any; children: (props
 // --- MAIN ACCORDION COMPONENT ---
 export function ProjectChecklistTable({ projectId, organizationId, onProgressChange }: Readonly<{ projectId: string, organizationId: string, onProgressChange: any }>) {
   const searchParams = useSearchParams()
+  const { hasPermission } = usePermissions()
+  const canCreateTask = hasPermission('create_tasks')
+  const canEditTask = hasPermission('edit_tasks')
+  const canDeleteTask = hasPermission('delete_tasks')
   const taskIdParam = searchParams.get('taskId')
   const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null)
   const [checklists, setChecklists] = useState<any[]>([])
@@ -1195,12 +1223,12 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
         try {
           if (isUuid(rawImpId)) {
             await supabase.from('improvements').update({
-              status: newStatus === 'done' ? 'implemented' : (newStatus === 'in_progress' ? 'evaluating' : 'pending'),
+              status: newStatus === 'done' ? 'implemented' : (newStatus === 'review' ? 'review' : (newStatus === 'in_progress' ? 'in_progress' : 'pending')),
               updated_at: new Date().toISOString()
             }).eq('id', rawImpId);
           } else if (item.title || item.name) {
             await supabase.from('improvements').update({
-              status: newStatus === 'done' ? 'implemented' : (newStatus === 'in_progress' ? 'evaluating' : 'pending'),
+              status: newStatus === 'done' ? 'implemented' : (newStatus === 'review' ? 'review' : (newStatus === 'in_progress' ? 'in_progress' : 'pending')),
               updated_at: new Date().toISOString()
             }).eq('title', item.title || item.name);
           }
@@ -1229,10 +1257,11 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
 
       try {
         await syncTaskToApecGlobal(updatedItem, {
-          status: isDone ? 'review' : newStatus,
+          status: newStatus,
           process: newProgress,
           progress: newProgress,
           is_completed: isDone,
+          checked: isDone,
           target_value: item.target_value || 100,
           kpi_item_id: item.kpi_item_id || 47,
           employee_assignments: updatedItem.employee_assignments || []
@@ -1312,12 +1341,12 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
         try {
           if (isUuid(rawImpId)) {
             await supabase.from('improvements').update({
-              status: newStatus === 'done' ? 'implemented' : (newStatus === 'in_progress' ? 'evaluating' : 'pending'),
+              status: newStatus === 'done' ? 'implemented' : (newStatus === 'review' ? 'review' : (newStatus === 'in_progress' ? 'in_progress' : 'pending')),
               updated_at: new Date().toISOString()
             }).eq('id', rawImpId);
           } else if (item.title || item.name) {
             await supabase.from('improvements').update({
-              status: newStatus === 'done' ? 'implemented' : (newStatus === 'in_progress' ? 'evaluating' : 'pending'),
+              status: newStatus === 'done' ? 'implemented' : (newStatus === 'review' ? 'review' : (newStatus === 'in_progress' ? 'in_progress' : 'pending')),
               updated_at: new Date().toISOString()
             }).eq('title', item.title || item.name);
           }
@@ -1520,7 +1549,7 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
 
       try {
         await syncTaskToApecGlobal(updatedItem, {
-          status: isDone ? 'review' : newStatus,
+          status: approve ? 'done' : newStatus,
           process: newProgress,
           progress: newProgress,
           is_completed: isDone,
@@ -1695,26 +1724,30 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
               </span>
             )}
           </button>
-          <button 
-            onClick={() => setShowImportDialog(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-emerald-200 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" /> Nhập Excel
-          </button>
-          <button 
-            onClick={async () => {
-              if (checklists.length > 0) {
-                setActiveChecklist(expandedList || checklists[0].id)
-                setItemToEdit(null)
-                setShowItemDialog(true)
-              } else {
-                await customAlert('Vui lòng tạo Checklist trước khi thêm công việc')
-              }
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" /> Thêm công việc
-          </button>
+          {canCreateTask && (
+            <button 
+              onClick={() => setShowImportDialog(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-emerald-200 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" /> Nhập Excel
+            </button>
+          )}
+          {canCreateTask && (
+            <button 
+              onClick={async () => {
+                if (checklists.length > 0) {
+                  setActiveChecklist(expandedList || checklists[0].id)
+                  setItemToEdit(null)
+                  setShowItemDialog(true)
+                } else {
+                  await customAlert('Vui lòng tạo Checklist trước khi thêm công việc')
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" /> Thêm công việc
+            </button>
+          )}
         </div>
       </div>
 
@@ -1944,23 +1977,31 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-1 pl-4 border-l border-slate-200" role="presentation" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
-                  <button onClick={(e) => {
-                      e.stopPropagation()
-                      setActiveChecklist(list.id)
-                      setItemToEdit(null)
-                      setShowItemDialog(true)
-                    }} 
-                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Thêm công việc">
-                    <Plus className="w-4 h-4" />
-                  </button>
-                  <button onClick={(e) => handleEditChecklistName(list, e)} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Đổi tên Danh sách">
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button onClick={(e) => handleDeleteChecklist(list, e)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Xóa Danh sách">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                {(canCreateTask || canEditTask || canDeleteTask) && (
+                  <div className="flex items-center gap-1 pl-4 border-l border-slate-200" role="presentation" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+                    {canCreateTask && (
+                      <button onClick={(e) => {
+                          e.stopPropagation()
+                          setActiveChecklist(list.id)
+                          setItemToEdit(null)
+                          setShowItemDialog(true)
+                        }} 
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Thêm công việc">
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    )}
+                    {canEditTask && (
+                      <button onClick={(e) => handleEditChecklistName(list, e)} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Đổi tên Danh sách">
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    {canDeleteTask && (
+                      <button onClick={(e) => handleDeleteChecklist(list, e)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Xóa Danh sách">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* List Body (Table) */}
@@ -2254,7 +2295,7 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
                 </div>
               )}
               
-              {isExpanded && (
+              {isExpanded && canCreateTask && (
                 <div className="bg-slate-50 border-t border-slate-100 p-2 flex justify-end">
                   <button 
                     onClick={() => {
@@ -2281,12 +2322,14 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
           </SortableContext>
         </DndContext>
 
-        <button 
-          onClick={() => setShowCreateChecklist(true)}
-          className="w-full flex items-center justify-center gap-2 py-3 border border-dashed border-blue-300 bg-blue-50/50 rounded-xl text-blue-600 text-xs font-bold hover:bg-blue-50 transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Thêm checklist mới
-        </button>
+        {canCreateTask && (
+          <button 
+            onClick={() => setShowCreateChecklist(true)}
+            className="w-full flex items-center justify-center gap-2 py-3 border border-dashed border-blue-300 bg-blue-50/50 rounded-xl text-blue-600 text-xs font-bold hover:bg-blue-50 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Thêm checklist mới
+          </button>
+        )}
       </div>
       
       <CreateChecklistDialog

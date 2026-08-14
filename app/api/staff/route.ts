@@ -31,11 +31,11 @@ export async function GET(request: NextRequest) {
     const { data: orgMembers } = await supabaseAdmin
       .from('organization_members')
       .select(`
-        id, user_id, organization_id, job_title,
+        id, user_id, organization_id, job_title, role_id,
         member_departments(
           departments(name)
         ),
-        user_roles(name)
+        user_roles(id, name, description)
       `)
       .is('deleted_at', null)
 
@@ -45,7 +45,9 @@ export async function GET(request: NextRequest) {
       const email = authUser?.email || 'Chưa có email'
       const member = orgMembers?.find((m: any) => m.user_id === p.id)
       const deptNames = member?.member_departments?.map((md: any) => md.departments?.name).filter(Boolean) || []
-      const roleName = member?.job_title || (p.is_super_admin ? 'Quản trị viên (Super Admin)' : 'Thành viên')
+      const userRolesData = (member as any)?.user_roles
+      const userRoleObj = Array.isArray(userRolesData) ? userRolesData[0] : userRolesData
+      const roleName = userRoleObj?.description || userRoleObj?.name || member?.job_title || (p.is_super_admin ? 'Quản trị viên (Super Admin)' : 'Thành viên')
 
       return {
         id: p.id,
@@ -54,6 +56,7 @@ export async function GET(request: NextRequest) {
         email: email,
         phone: p.phone || '-',
         role: roleName,
+        role_id: member?.role_id || userRoleObj?.id,
         departments: deptNames,
         is_super_admin: p.is_super_admin || false,
         stats: {
@@ -187,8 +190,8 @@ export async function PUT(request: NextRequest) {
 
     const { id, full_name, organization_ids, department_ids, role, phone, email, password } = await request.json()
 
-    if (!id || !full_name) {
-      return NextResponse.json({ error: 'Thiếu thông tin bắt buộc' }, { status: 400 })
+    if (!id) {
+      return NextResponse.json({ error: 'Thiếu ID nhân viên' }, { status: 400 })
     }
 
     const validOrgIds = Array.isArray(organization_ids) ? organization_ids.filter(Boolean) : []
@@ -198,11 +201,19 @@ export async function PUT(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
+    let finalFullName = full_name;
+    if (!finalFullName) {
+      const { data: existingProfile } = await supabaseAdmin.from('profiles').select('full_name').eq('id', id).single();
+      finalFullName = existingProfile?.full_name || 'Nhân viên';
+    }
+
     // 1. Update profile & auth user
-    await supabaseAdmin.from('profiles').update({ full_name, phone: phone || null }).eq('id', id)
+    const profileUpdates: any = { full_name: finalFullName };
+    if (phone !== undefined) profileUpdates.phone = phone || null;
+    await supabaseAdmin.from('profiles').update(profileUpdates).eq('id', id)
     
     // Build user update payload
-    const userUpdatePayload: any = { user_metadata: { full_name } }
+    const userUpdatePayload: any = { user_metadata: { full_name: finalFullName } }
     if (email) userUpdatePayload.email = email
     if (password) userUpdatePayload.password = password
     

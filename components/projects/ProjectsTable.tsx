@@ -25,9 +25,9 @@ export function ProjectsTable({
   onEditClick,
   onDeleteClick,
   onStatusChange,
-  canView = true,
-  canEdit = true,
-  canDelete = true,
+  canView = false,
+  canEdit = false,
+  canDelete = false,
 }: ProjectsTableProps) {
   const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null)
   const router = useRouter()

@@ -3,6 +3,7 @@
 import { Clock, Calendar, Wallet, PenSquare, Copy } from 'lucide-react'
 import { useState } from 'react'
 import { EditProjectDialog } from './EditProjectDialog'
+import { usePermissions } from '@/hooks/usePermissions'
 
 interface LeftSidebarProps {
   project: any
@@ -14,6 +15,9 @@ interface LeftSidebarProps {
 
 export function ProjectLeftSidebar({ project, progress, formatCurrency, onProjectUpdated, onDuplicateProject }: Readonly<LeftSidebarProps>) {
   const [showEdit, setShowEdit] = useState(false)
+  const { hasPermission } = usePermissions()
+  const canEditProject = hasPermission('edit_projects')
+  const canCreateProject = hasPermission('create_projects')
 
   const getPriorityColor = (p: string) => {
     if (p === 'high') return 'text-red-700 bg-red-100'
@@ -107,24 +111,28 @@ export function ProjectLeftSidebar({ project, progress, formatCurrency, onProjec
       </div>
 
       {/* Floating Actions on the right */}
-      <div className="absolute top-1/2 -translate-y-1/2 right-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-        <button 
-          onClick={() => setShowEdit(true)}
-          className="p-2 bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 rounded-full shadow-sm"
-          title="Sửa thông tin dự án"
-        >
-          <PenSquare className="w-4 h-4" />
-        </button>
-        {onDuplicateProject && (
-          <button 
-            onClick={onDuplicateProject}
-            className="p-2 bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 hover:text-red-700 rounded-full shadow-sm"
-            title="Nhân bản dự án"
-          >
-            <Copy className="w-4 h-4" />
-          </button>
-        )}
-      </div>
+      {(canEditProject || (onDuplicateProject && canCreateProject)) && (
+        <div className="absolute top-1/2 -translate-y-1/2 right-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          {canEditProject && (
+            <button 
+              onClick={() => setShowEdit(true)}
+              className="p-2 bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 rounded-full shadow-sm"
+              title="Sửa thông tin dự án"
+            >
+              <PenSquare className="w-4 h-4" />
+            </button>
+          )}
+          {onDuplicateProject && canCreateProject && (
+            <button 
+              onClick={onDuplicateProject}
+              className="p-2 bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 hover:text-red-700 rounded-full shadow-sm"
+              title="Nhân bản dự án"
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      )}
 
       <EditProjectDialog 
         isOpen={showEdit}

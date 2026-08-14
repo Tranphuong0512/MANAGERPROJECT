@@ -150,11 +150,13 @@ export async function GET(
       const syncPromises: Promise<any>[] = [];
       
       localIncidents.forEach((inc: any) => {
-        const matchingTask = projectTasks.find((t: any) => 
-          String(t.id) === String(inc.checklist_item_id || inc.id) ||
-          `apec_${t.id}` === String(inc.checklist_item_id) ||
-          (t.name && inc.title && t.name.trim().toLowerCase() === inc.title.trim().toLowerCase())
-        );
+        const cleanIncId = String(inc.checklist_item_id || inc.id || '').replace(/^apec_/, '').replace(/^inc_/, '').replace(/^imp_/, '');
+        const matchingTask = projectTasks.find((t: any) => {
+          const cleanTaskId = String(t.id || '').replace(/^apec_/, '');
+          return cleanTaskId === cleanIncId ||
+                 (t.name && inc.title && t.name.trim().toLowerCase() === inc.title.trim().toLowerCase()) ||
+                 (t.title && inc.title && t.title.trim().toLowerCase() === inc.title.trim().toLowerCase());
+        });
 
         if (matchingTask) {
           // Tự động đồng bộ trạng thái từ APEC Task về Incidents nếu có sự đứt gãy
@@ -162,12 +164,13 @@ export async function GET(
           const taskStatusId = Number(matchingTask.status?.id || matchingTask.task_status?.id || matchingTask.status);
           const statusName = String(matchingTask.status?.name || matchingTask.status || '').toLowerCase();
           
-          const isTaskDone = taskStatusId === 4 || taskProc >= 100 || Boolean(matchingTask.is_completed || matchingTask.checked) || 
-                             statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || statusName === 'done';
+          const isTaskDone = taskStatusId === 4 || Boolean(matchingTask.is_completed) || 
+                             statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || statusName === 'done' || statusName === 'completed' || statusName === 'resolved';
           
           let expectedIncStatus = 'new';
           if (isTaskDone) expectedIncStatus = 'resolved';
-          else if (taskProc > 0 || taskStatusId === 2 || taskStatusId === 3 || statusName.includes('đang thực hiện') || statusName.includes('chờ duyệt') || statusName === 'in_progress' || statusName === 'review') expectedIncStatus = 'investigating';
+          else if (taskStatusId === 3 || statusName.includes('chờ duyệt') || statusName === 'review' || taskProc >= 100) expectedIncStatus = 'review';
+          else if (taskProc > 0 || taskStatusId === 2 || statusName.includes('đang thực hiện') || statusName === 'in_progress' || statusName === 'investigating' || statusName === 'fixing') expectedIncStatus = 'investigating';
 
           let updatePayload: any = {};
           let needsUpdate = false;
@@ -255,23 +258,26 @@ export async function GET(
       });
 
       localImprovements.forEach((imp: any) => {
-        const matchingTask = projectTasks.find((t: any) => 
-          String(t.id) === String(imp.checklist_item_id || imp.id) ||
-          `apec_${t.id}` === String(imp.checklist_item_id) ||
-          (t.name && imp.title && t.name.trim().toLowerCase() === imp.title.trim().toLowerCase())
-        );
+        const cleanImpId = String(imp.checklist_item_id || imp.id || '').replace(/^apec_/, '').replace(/^inc_/, '').replace(/^imp_/, '');
+        const matchingTask = projectTasks.find((t: any) => {
+          const cleanTaskId = String(t.id || '').replace(/^apec_/, '');
+          return cleanTaskId === cleanImpId ||
+                 (t.name && imp.title && t.name.trim().toLowerCase() === imp.title.trim().toLowerCase()) ||
+                 (t.title && imp.title && t.title.trim().toLowerCase() === imp.title.trim().toLowerCase());
+        });
 
         if (matchingTask) {
           const taskProc = Number(matchingTask.process ?? matchingTask.progress ?? 0);
           const taskStatusId = Number(matchingTask.status?.id || matchingTask.task_status?.id || matchingTask.status);
           const statusName = String(matchingTask.status?.name || matchingTask.status || '').toLowerCase();
           
-          const isTaskDone = taskStatusId === 4 || taskProc >= 100 || Boolean(matchingTask.is_completed || matchingTask.checked) || 
-                             statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || statusName === 'done';
+          const isTaskDone = taskStatusId === 4 || Boolean(matchingTask.is_completed) || 
+                             statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || statusName === 'done' || statusName === 'completed' || statusName === 'implemented';
           
           let expectedImpStatus = 'pending';
           if (isTaskDone) expectedImpStatus = 'implemented';
-          else if (taskProc > 0 || taskStatusId === 2 || taskStatusId === 3 || statusName.includes('đang thực hiện') || statusName.includes('chờ duyệt') || statusName === 'in_progress' || statusName === 'review') expectedImpStatus = 'in_progress';
+          else if (taskStatusId === 3 || statusName.includes('chờ duyệt') || statusName === 'review' || taskProc >= 100) expectedImpStatus = 'review';
+          else if (taskProc > 0 || taskStatusId === 2 || statusName.includes('đang thực hiện') || statusName === 'in_progress' || statusName === 'evaluating') expectedImpStatus = 'in_progress';
 
           let updatePayload: any = {};
           let needsUpdate = false;
@@ -535,6 +541,9 @@ export async function GET(
           // - process === 0 → "Chưa làm" (todo)
           const isApprovedByBoss = ea.length > 0 && ea.every((assign: any) => assign.checked === true);
           const parentProcess = Number(t.process ?? t.progress ?? 0);
+          const taskStatusId = Number(t.status?.id || t.task_status?.id || t.status);
+          const statusName = String(t.status?.name || t.status || '').toLowerCase();
+          const isApecDone = taskStatusId === 4 || t.status === 'done' || t.status === 'completed' || t.status === 'resolved' || t.status === 'implemented' || statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || Boolean(t.is_completed);
           
           // Tính tiến độ hiển thị: lấy max giữa process cha và trung bình EA process
           let avgProgress = parentProcess;
@@ -548,12 +557,12 @@ export async function GET(
           }
 
           let taskStatus = 'todo';
-          if (isApprovedByBoss) {
-            taskStatus = 'done'; // Sếp đã tích checked = true → Đã duyệt
-          } else if (parentProcess >= 100) {
-            taskStatus = 'review'; // t.process (task-level) đạt 100% nhưng sếp chưa duyệt → Chờ duyệt
-          } else if (avgProgress > 0 || parentProcess > 0) {
-            taskStatus = 'in_progress'; // Đang thực hiện (kể cả EA/subtasks 100% nhưng t.process < 100)
+          if (isApecDone || isApprovedByBoss) {
+            taskStatus = 'done'; // Sếp đã tích checked = true HOẶC server APEC đã duyệt
+          } else if (taskStatusId === 3 || statusName.includes('chờ duyệt') || statusName === 'review' || parentProcess >= 100 || avgProgress >= 100) {
+            taskStatus = 'review'; // t.process (task-level) đạt 100% hoặc status = 3 nhưng sếp chưa duyệt → Chờ duyệt
+          } else if (avgProgress > 0 || parentProcess > 0 || taskStatusId === 2 || statusName.includes('đang')) {
+            taskStatus = 'in_progress'; // Đang thực hiện
           } else {
             taskStatus = 'todo';
           }
@@ -575,7 +584,7 @@ export async function GET(
             kpi_item_id: Number(t.kpi_item?.id || t.kpi_item_id || 47),
             start_date: t.date_start || null,
             end_date: t.date_end || t.due_date || null,
-            is_completed: isApprovedByBoss, // CHỈ hoàn thành khi sếp đã duyệt (checked = true)
+            is_completed: isApecDone || isApprovedByBoss, // Hoàn thành khi server APEC đã xong hoặc sếp đã duyệt
             assignees: resolvedAssignees,
             sort_order: 0,
             employee_assignments: hydratedAssignments,

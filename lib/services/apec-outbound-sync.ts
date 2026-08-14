@@ -17,27 +17,28 @@ import crypto from 'crypto';
 
 /**
  * Map status (string/object/number) -> numeric ID cho Apec Global API
- * 1 = Chưa thực hiện, 2 = Đang thực hiện, 3 = Chờ duyệt, 4 = Hoàn thành
+ * 1 = Chưa thực hiện / Lên kế hoạch, 2 = Đang thực hiện, 3 = Chờ duyệt, 4 = Hoàn thành / Đã duyệt
  */
 function resolveStatusId(st: any, fallbackProcess?: number): number {
   if (st && typeof st === 'object') {
     if (st.id) return Number(st.id);
     const name = String(st.name || '').toLowerCase();
-    if (name.includes('hoàn thành') || name.includes('done') || name.includes('completed')) return 4;
-    if (name.includes('chờ duyệt') || name.includes('review')) return 3;
-    if (name.includes('đang') || name.includes('in_progress') || name.includes('progress')) return 2;
-    if (name.includes('chưa') || name.includes('todo') || name.includes('not_started')) return 1;
+    if (name.includes('hoàn thành') || name.includes('done') || name.includes('completed') || name.includes('đã duyệt') || name.includes('resolved') || name.includes('implemented') || name.includes('đóng') || name.includes('closed')) return 4;
+    if (name.includes('chờ duyệt') || name.includes('review') || name.includes('chờ') || name.includes('pending')) return 3;
+    if (name.includes('đang') || name.includes('in_progress') || name.includes('progress') || name.includes('investigating') || name.includes('fixing') || name.includes('evaluating') || name.includes('doing')) return 2;
+    if (name.includes('chưa') || name.includes('todo') || name.includes('not_started') || name.includes('planning') || name.includes('kế hoạch') || name.includes('new') || name.includes('mới')) return 1;
   }
   if (typeof st === 'string') {
     const s = st.toLowerCase();
-    if (s === 'done' || s === 'completed') return 4;
-    if (s === 'review' || s === 'pending_review') return 3;
-    if (s === 'in_progress' || s === 'doing') return 2;
-    if (s === 'todo' || s === 'not_started') return 1;
+    if (s === 'done' || s === 'completed' || s === 'resolved' || s === 'implemented' || s === 'closed' || s === 'finished') return 4;
+    if (s === 'review' || s === 'pending_review' || s === 'pending_approval' || s === 'waiting_approval' || s === 'pending') return 3;
+    if (s === 'in_progress' || s === 'doing' || s === 'investigating' || s === 'fixing' || s === 'evaluating' || s === 'active') return 2;
+    if (s === 'todo' || s === 'not_started' || s === 'new' || s === 'planning' || s === 'planned' || s === 'on_hold' || s === 'hold' || s === 'paused' || s === 'cancelled' || s === 'canceled' || s === 'rejected' || s === 'proposed' || s === 'open') return 1;
   }
-  if (st != null && !Number.isNaN(Number(st))) return Number(st);
+  if (st != null && !Number.isNaN(Number(st)) && Number(st) > 0) return Number(st);
   const p = fallbackProcess ?? 0;
-  return p >= 100 ? 4 : p > 0 ? 2 : 1;
+  // QUAN TRỌNG: Nhiệm vụ hoàn thành 100% từ nhân viên gửi lên phải là status 3 (Chờ duyệt), không được tự duyệt thành 4
+  return p >= 100 ? 3 : p > 0 ? 2 : 1;
 }
 
 function resolveNumericId(val: any): number | string | undefined {
@@ -45,9 +46,14 @@ function resolveNumericId(val: any): number | string | undefined {
   if (typeof val === 'number') return val;
   const str = String(val).trim();
   if (/^\d+$/.test(str)) return Number(str);
-  const cleaned = str.replace(/^(apec_type_t_|apec_type_|apec_emp_|apec_prj_|apec_|p-|prj_|t_|st_|st_dir_)+/ig, '');
+  const cleaned = str.replace(/^(apec_type_t_|apec_type_|apec_emp_|apec_prj_|apec_|p-|prj_|t_|st_|st_dir_|ea_inc_|ea_imp_|inc_|imp_)+/ig, '');
   if (/^\d+$/.test(cleaned)) return Number(cleaned);
   return val;
+}
+
+function isNumericApecId(val: any): boolean {
+  const resolved = resolveNumericId(val);
+  return typeof resolved === 'number' && !isNaN(resolved) && resolved > 0;
 }
 
 function getOutboundCandidateEndpoints(endpoint: string, bodyData: any): string[] {
@@ -302,20 +308,31 @@ export async function syncProjectOutbound(
     method = 'POST';
     body = projectData;
   } else if (action === 'UPDATE') {
+    const numId = resolveNumericId(projectData.id);
+    if (typeof numId !== 'number' || isNaN(numId) || numId <= 0) {
+      return { success: true, message: 'Dự án nội bộ Supabase, không đồng bộ APEC' };
+    }
     endpoint = '/api/v1/external/projects/update';
     method = 'PUT';
     body = {
       ...projectData,
-      id: resolveNumericId(projectData.id),
+      id: numId,
+      name: projectData.name || 'Dự án',
+      company_id: (projectData as any).company_id || 6,
     };
-    if (projectData.status) {
+    if (projectData.status !== undefined) {
       body.status = resolveStatusId(projectData.status);
     }
   } else if (action === 'DELETE') {
     endpoint = '/api/v1/external/projects/delete';
     method = 'DELETE';
+    const rawIds = projectData.ids || (projectData.id ? [projectData.id] : []);
+    const cleanIds = rawIds.map(resolveNumericId).map(Number).filter(n => !isNaN(n) && n > 0);
+    if (cleanIds.length === 0) {
+      return { success: true, message: 'Dự án nội bộ Supabase, đã xóa cục bộ' };
+    }
     body = {
-      ids: projectData.ids || (projectData.id ? [projectData.id] : []),
+      ids: cleanIds,
     };
   }
 
@@ -357,9 +374,12 @@ export async function syncTaskTypeOutbound(
       projects: checklistData.projects || [],
     };
   } else if (action === 'UPDATE') {
+    const numId = resolveNumericId(checklistData.id);
+    if (typeof numId !== 'number' || isNaN(numId) || numId <= 0) {
+      return { success: true, message: 'Checklist nội bộ Supabase, không đồng bộ APEC' };
+    }
     endpoint = '/api/v1/external/tasks/types/update';
     method = 'PUT';
-    const numId = resolveNumericId(checklistData.id);
     body = {
       id: numId,
       name: checklistData.name,
@@ -376,8 +396,11 @@ export async function syncTaskTypeOutbound(
     const rawIds = checklistData.ids || (checklistData.id ? [checklistData.id] : []);
     const cleanIds = rawIds.map(resolveNumericId).map(Number).filter(n => !isNaN(n) && n > 0);
     const cleanSingleId = Number(resolveNumericId(checklistData.id || rawIds[0]));
+    if (cleanIds.length === 0 && (isNaN(cleanSingleId) || cleanSingleId <= 0)) {
+      return { success: true, message: 'Checklist nội bộ Supabase, đã xóa cục bộ' };
+    }
     body = {
-      id: cleanSingleId,
+      id: !isNaN(cleanSingleId) && cleanSingleId > 0 ? cleanSingleId : cleanIds[0],
       ids: cleanIds.length > 0 ? cleanIds : [cleanSingleId],
     };
   }
@@ -629,6 +652,11 @@ export async function syncTaskOutbound(
       body.department = body.department_id;
     }
   } else if (action === 'UPDATE') {
+    const cleanId = resolveNumericId(taskData.id);
+    if (typeof cleanId !== 'number' || isNaN(cleanId) || cleanId <= 0) {
+      return { success: true, message: 'Nhiệm vụ nội bộ Supabase, không đồng bộ APEC' };
+    }
+
     endpoint = '/api/v1/external/tasks/update';
     method = 'PUT';
     // Map status string/object -> numeric ID cho Apec Global
@@ -639,14 +667,39 @@ export async function syncTaskOutbound(
       targetVal = (resolvedKpiId === 47 || resolvedKpiId === 48) ? 100 : (resolvedKpiId === 45 ? 1000000 : 1);
     }
     const numStatus = resolveStatusId(taskData.status || taskData.task_status, numProcess);
+    const isCompletedStatus = numStatus === 4 || taskData.is_completed === true || taskData.status === 'done' || taskData.status === 'completed' || taskData.status === 'resolved';
+
+    // Nếu task chuyển sang Hoàn thành và có danh sách employee_assignments trong payload, tự động duyệt trước
+    if (isCompletedStatus && Array.isArray(taskData.employee_assignments) && taskData.employee_assignments.length > 0) {
+      for (const ea of taskData.employee_assignments) {
+        const eaNumId = resolveNumericId(ea.id || ea.ea_id || ea.raw_id);
+        if (typeof eaNumId === 'number' && eaNumId > 0) {
+          try {
+            await sendOutboundRequest('/api/v1/tasks/progress/update', 'PUT', {
+              id: eaNumId,
+              task_id: cleanId,
+              value: 100,
+              actual_value: 100,
+              process: 100,
+              target_value: targetVal,
+              status: 2,
+              checked: true
+            }, secretKey);
+            await sendOutboundRequest('/api/v1/external/tasks/approve', 'PUT', {
+              task_assignment_id: eaNumId
+            }, secretKey);
+          } catch {}
+        }
+      }
+    }
 
     body = {
       ...taskData,
-      id: resolveNumericId(taskData.id),
-      status: numStatus,
-      task_status: numStatus,
-      process: numProcess,
-      progress: numProcess,
+      id: cleanId,
+      status: isCompletedStatus ? 4 : numStatus,
+      task_status: isCompletedStatus ? 4 : numStatus,
+      process: isCompletedStatus ? Math.max(numProcess, 100) : numProcess,
+      progress: isCompletedStatus ? Math.max(numProcess, 100) : numProcess,
       kpi_item_id: resolvedKpiId,
       target_value: targetVal,
       updated_at: new Date().toISOString(),
@@ -667,10 +720,14 @@ export async function syncTaskOutbound(
     endpoint = '/api/v1/external/tasks/delete';
     method = 'DELETE';
     const rawIds = taskData.ids || (taskData.id ? [taskData.id] : []);
-    const cleanId = resolveNumericId(taskData.id || (rawIds[0] ?? ''));
+    const cleanIds = rawIds.map(resolveNumericId).map(Number).filter(n => !isNaN(n) && n > 0);
+    const cleanId = resolveNumericId(taskData.id || rawIds[0]);
+    if (typeof cleanId !== 'number' && cleanIds.length === 0) {
+      return { success: true, message: 'Nhiệm vụ nội bộ Supabase, đã xóa cục bộ' };
+    }
     body = {
-      id: cleanId,
-      ids: rawIds.map(resolveNumericId),
+      id: typeof cleanId === 'number' ? cleanId : cleanIds[0],
+      ids: cleanIds.length > 0 ? cleanIds : [cleanId],
     };
   }
 
@@ -775,7 +832,7 @@ export async function syncTaskOutbound(
               process: taskData.process !== undefined ? taskData.process : (taskData.progress !== undefined ? taskData.progress : st.process),
               progress: taskData.process !== undefined ? taskData.process : (taskData.progress !== undefined ? taskData.progress : st.process),
               status: taskData.status || st.status,
-              checked: st.checked !== undefined ? st.checked : (Number(taskData.process || taskData.progress) >= 100),
+              checked: st.checked !== undefined ? st.checked : (taskData.status === 'done' || taskData.status === 4 || taskData.is_completed === true),
               completed_date: st.completed_date || taskData.date_end || taskData.end_date,
             },
             changedBy,
@@ -850,6 +907,11 @@ export async function syncAssignmentOutbound(
     endpoint = '/api/v1/external/assignments/create';
     method = 'POST';
   } else if (action === 'UPDATE') {
+    const numEaId = resolveNumericId(assignmentData.id);
+    if (typeof numEaId !== 'number' || isNaN(numEaId) || numEaId <= 0) {
+      return { success: true, message: 'Phân công nội bộ Supabase, không đồng bộ APEC' };
+    }
+
     endpoint = '/api/v1/tasks/progress/update';
     method = 'PUT';
     const numProcess = Number(
@@ -862,35 +924,48 @@ export async function syncAssignmentOutbound(
 
     const numStatus = resolveStatusId(assignmentData.status, numProcess);
     const targetVal = Number(assignmentData.target_value) || 100;
-    const isCompleted = Boolean(assignmentData.checked) || numProcess >= 100 || numStatus === 4;
+    const isExplicitlyDone = assignmentData.status === 'done' || assignmentData.status === 'completed' || assignmentData.checked === true || numStatus === 4;
+    const resolvedStatus = isExplicitlyDone ? 4 : (numProcess >= 100 ? 3 : numStatus);
 
     body = {
-      id: resolveNumericId(assignmentData.id),
+      id: numEaId,
       task_id: resolveNumericId(assignmentData.task_id || assignmentData.taskId || assignmentData.parent_id),
       value: numProcess,
       actual_value: numProcess,
       process: numProcess,
       progress: numProcess,
       target_value: targetVal,
-      status: isCompleted ? 4 : numStatus,
-      checked: isCompleted,
+      status: resolvedStatus,
+      checked: isExplicitlyDone,
     };
   } else if (action === 'DELETE') {
     endpoint = '/api/v1/external/assignments/delete';
     method = 'DELETE';
     const rawIds = assignmentData.ids || (assignmentData.id ? [assignmentData.id] : []);
+    const cleanIds = rawIds.map(resolveNumericId).map(Number).filter(n => !isNaN(n) && n > 0);
+    if (cleanIds.length === 0) {
+      return { success: true, message: 'Phân công nội bộ Supabase, đã xóa cục bộ' };
+    }
     body = {
-      ids: rawIds.map(resolveNumericId),
+      ids: cleanIds,
     };
   }
 
   let res = await sendOutboundRequest(endpoint, method, body, secretKey);
 
+  // Nếu hoàn thành thành công, tự động gọi approve để máy chủ xác nhận đã duyệt
+  const isExplicitlyDoneFinal = assignmentData.status === 'done' || assignmentData.status === 'completed' || assignmentData.checked === true;
+  const finalEaId = resolveNumericId(assignmentData.id);
+  if (action === 'UPDATE' && res.success && isExplicitlyDoneFinal && typeof finalEaId === 'number' && finalEaId > 0) {
+    try {
+      await sendOutboundRequest('/api/v1/external/tasks/approve', 'PUT', { task_assignment_id: finalEaId }, secretKey);
+    } catch {}
+  }
+
   // Nếu máy chủ báo lỗi liên quan đến target_value hoặc chưa đạt target_value
   if (!res.success && (res.error?.includes('target_value') || res.message?.includes('target_value') || res.error?.includes('hoàn thành'))) {
     const targetVal = Number(assignmentData.target_value) || 100;
     const numProcess = Number(assignmentData.process ?? assignmentData.progress ?? 0);
-    const isCompleted = Boolean(assignmentData.checked) || numProcess >= 100;
     const parentTaskId = resolveNumericId(assignmentData.task_id || assignmentData.taskId || assignmentData.parent_id);
 
     // Ép khởi tạo target_value lên task cha trước
@@ -906,10 +981,10 @@ export async function syncAssignmentOutbound(
       } catch {}
     }
     
-    // Thử gửi cập nhật với status: 2 trước kèm target_value
+    // Thử gửi cập nhật với status: 2 hoặc 3 kèm target_value
     const retryBody = {
       ...body,
-      status: 2,
+      status: numProcess >= 100 ? 3 : 2,
       target_value: targetVal,
       actual_value: numProcess,
       value: numProcess
@@ -917,11 +992,6 @@ export async function syncAssignmentOutbound(
     const retryRes = await sendOutboundRequest(endpoint, method, retryBody, secretKey);
     if (retryRes.success) {
       res = retryRes;
-      if (isCompleted && assignmentData.id) {
-        try {
-          await syncTaskApproveOutbound(assignmentData.id, changedBy, secretKey);
-        } catch {}
-      }
     }
   }
 
@@ -967,6 +1037,9 @@ export async function syncTaskApproveOutbound(
   secretKey?: string
 ) {
   const cleanId = resolveNumericId(taskAssignmentId);
+  if (typeof cleanId !== 'number' || isNaN(cleanId) || cleanId <= 0) {
+    return { success: true, message: 'Phân công nội bộ Supabase, không cần duyệt APEC' };
+  }
   const body = {
     task_assignment_id: cleanId
   };

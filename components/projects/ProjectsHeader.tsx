@@ -27,8 +27,8 @@ export function ProjectsHeader({
   setSearchQuery,
   statusFilter,
   setStatusFilter,
-  canCreate = true,
-  canExport = true,
+  canCreate = false,
+  canExport = false,
   isPreparingReport = false,
 }: ProjectsHeaderProps) {
   return (

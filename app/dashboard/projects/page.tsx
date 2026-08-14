@@ -182,10 +182,9 @@ export default function ProjectsPage() {
         
       const incidentsPromise = supabase
         .from('incidents')
-        .select('status, projects!inner(deleted_at)')
-        .eq('organization_id', orgId)
-        .is('deleted_at', null)
-        .is('projects.deleted_at', null);
+        .select('id, title, status, checklist_item_id')
+        .or(`organization_id.eq.${orgId},organization_id.is.null`)
+        .is('deleted_at', null);
 
       const [projectsResult, incidentsResult, apecProjectsRes, allDbProjectsRes] = await Promise.all([
         projectsPromise,
@@ -317,18 +316,114 @@ export default function ProjectsPage() {
       const total = projectsData?.length || 0
       const active = projectsData?.filter(p => p.status === 'active' || p.status === 'in_progress').length || 0
       const completed = projectsData?.filter(p => p.status === 'completed' || p.status === 'done').length || 0
-      const overdue = projectsData?.filter(p => p.status === 'overdue').length || 0
+      
+      // Tính overdue: gồm cả status 'overdue' và dự án chưa hoàn thành mà end_date < now
+      const now = new Date()
+      const overdue = projectsData?.filter(p => {
+        if (p.status === 'overdue') return true
+        if (p.end_date && (p.status === 'active' || p.status === 'in_progress' || p.status === 'planning')) {
+          return new Date(p.end_date) < now
+        }
+        return false
+      }).length || 0
       
       const computedTotalBudget = projectsData?.reduce((sum, p) => sum + (p.budget || 0), 0) || 0
 
-      let totalIncidents = 0
-      let unresolvedIncidents = 0
-      
-      const orgIncidents = incidentsResult.data;
-      if (orgIncidents) {
-        totalIncidents = orgIncidents.length
-        unresolvedIncidents = orgIncidents.filter(i => i.status !== 'fixed' && i.status !== 'closed' && i.status !== 'resolved').length
+      // Tính tổng tasks từ checklists đã fetch
+      let totalTasks = 0
+      let completedTasks = 0
+      projectsData?.forEach((p: any) => {
+        const checklists = p.project_checklists || []
+        checklists.forEach((list: any) => {
+          const items = list.checklist_items || []
+          totalTasks += items.length
+          completedTasks += items.filter((i: any) => i.status === 'done' || i.is_completed).length
+        })
+      })
+
+      // Gộp tasks từ APEC Global & phát hiện Incidents từ APEC
+      let apecTotalTasks = 0
+      let apecCompletedTasks = 0
+      let apecRawItems: any[] = []
+      try {
+        const apecTasksRes = await fetch('/api/v1/apec-global/tasks').then(r => r.json()).catch(() => ({ success: false, items: [] }))
+        if (apecTasksRes.success && apecTasksRes.items) {
+          apecRawItems = apecTasksRes.items || []
+          apecTotalTasks = apecRawItems.length
+          apecCompletedTasks = apecRawItems.filter((t: any) => {
+            const progressVal = Number(t.progress || t.process) || 0
+            if (progressVal >= 100) return true
+            const rawStatus = t.status || t.task_status
+            if (rawStatus && typeof rawStatus === 'object') {
+              return Number(rawStatus.id) === 4
+            }
+            if (typeof rawStatus === 'string') {
+              const s = rawStatus.toLowerCase()
+              return s === 'done' || s === 'completed'
+            }
+            return false
+          }).length
+        }
+      } catch (e) {
+        console.warn('APEC tasks fetch for projects stats:', e)
       }
+
+      const combinedTotalTasks = totalTasks + apecTotalTasks
+      const combinedCompletedTasks = completedTasks + apecCompletedTasks
+
+      // Xử lý Incidents: Supabase + APEC tasks có type là SỰ CỐ & RỦI RO
+      const orgIncidents = incidentsResult.data || []
+      const apecIncidentTasks = (apecRawItems || []).filter((t: any) => {
+        const typeName = String(t.type?.name || t.type_name || '').toUpperCase()
+        return typeName.includes('SỰ CỐ') || typeName.includes('RỦI RO')
+      })
+
+      const mapApecIncidentStatus = (t: any): string => {
+        const taskProc = Number(t.process ?? t.progress ?? 0)
+        const statusName = String(t.status?.name || t.status || '').toLowerCase()
+        const statusId = Number(t.status?.id || t.task_status?.id || t.status)
+        
+        if (t.is_completed || t.status === 'done' || taskProc >= 100 || statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || statusId === 4) return 'resolved'
+        if (t.status === 'review' || statusName.includes('chờ duyệt') || statusId === 3) return 'review'
+        if (t.status === 'in_progress' || statusName.includes('đang thực hiện') || statusId === 2) return 'investigating'
+        return 'new'
+      }
+
+      const existingIncidentIds = new Set([
+        ...orgIncidents.map((i: any) => String(i.id)),
+        ...orgIncidents.map((i: any) => String(i.checklist_item_id || '')).filter(Boolean)
+      ])
+
+      const extraApecIncidents = apecIncidentTasks
+        .filter((t: any) => !existingIncidentIds.has(String(t.id)))
+        .map((t: any) => ({
+          id: String(t.id),
+          title: t.name || t.title || '',
+          status: mapApecIncidentStatus(t),
+          created_at: t.created_at || new Date().toISOString(),
+          _from_apec: true,
+        }))
+
+      const combinedIncidents = [
+        ...orgIncidents.map((inc: any) => {
+          let currentStatus = inc.status
+          const apecTask = (apecRawItems || []).find((t: any) => 
+            String(t.id) === String(inc.checklist_item_id || inc.id) ||
+            `apec_${t.id}` === String(inc.checklist_item_id) ||
+            (t.name && inc.title && t.name.trim().toLowerCase() === inc.title.trim().toLowerCase())
+          )
+          if (apecTask) {
+            currentStatus = mapApecIncidentStatus(apecTask)
+          }
+          return { ...inc, status: currentStatus }
+        }),
+        ...extraApecIncidents
+      ]
+
+      const totalIncidents = combinedIncidents.length
+      const unresolvedIncidents = combinedIncidents.filter((i: any) =>
+        i.status !== 'resolved' && i.status !== 'closed' && i.status !== 'fixed'
+      ).length
 
       setStats({
         totalProjects: total,
@@ -337,7 +432,9 @@ export default function ProjectsPage() {
         overdueProjects: overdue,
         totalBudget: computedTotalBudget,
         totalIncidents,
-        unresolvedIncidents
+        unresolvedIncidents,
+        totalTasks: combinedTotalTasks,
+        completedTasks: combinedCompletedTasks,
       })
 
     } catch (err) {
@@ -412,25 +509,31 @@ export default function ProjectsPage() {
               // Optimistic update
               setProjects(prev => prev.map(p => p.id === project.id ? { ...p, status: newStatus } : p))
               // Extract numeric ID for APEC API from code (e.g. "P-62" -> 62)
-              const codeNum = project.code ? project.code.replace(/^P-/i, '') : '';
-              const apecId = codeNum && /^\d+$/.test(codeNum) ? Number(codeNum) : project.id;
-              // Sync to APEC GLOBAL
-              try {
-                await fetch('/api/v1/apec-global/projects', {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id: apecId, status: newStatus }),
-                });
-              } catch (e) {
-                console.warn('Lỗi đồng bộ Apec Global khi chuyển trạng thái dự án:', e);
+              const codeNum = project.code ? String(project.code).replace(/^P-/i, '') : '';
+              const rawIdClean = String(project.id || '').replace(/^(apec_prj_|apec_|prj_|p-)+/i, '');
+              const apecId = codeNum && /^\d+$/.test(codeNum) ? Number(codeNum) : (/^\d+$/.test(rawIdClean) ? Number(rawIdClean) : null);
+              // Sync to APEC GLOBAL only if numeric APEC ID is available
+              if (apecId) {
+                try {
+                  await fetch('/api/v1/apec-global/projects', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      id: apecId,
+                      name: project.name || 'Dự án',
+                      status: newStatus,
+                      company_id: (project as any).company_id || (project as any).organization_id || 6,
+                    }),
+                  });
+                } catch (e) {
+                  console.warn('Lỗi đồng bộ Apec Global khi chuyển trạng thái dự án:', e);
+                }
               }
               // Sync to Supabase
-              const isUuidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(project.id);
+              const isUuidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(project.id));
               if (isUuidId) {
                 await supabase.from('projects').update({ status: newStatus }).eq('id', project.id);
               }
-              // Don't reload immediately - let optimistic update stand
-              // The next natural load will pick up the persisted status
             }}
             canView={hasPermission('view_projects')}
             canEdit={hasPermission('edit_projects')}
@@ -440,24 +543,33 @@ export default function ProjectsPage() {
         {viewMode === 'board' && (
           <ProjectsBoard 
             projects={filteredProjects}
+            canEdit={hasPermission('edit_projects')}
             onStatusChange={async (id, status) => {
               // Optimistic update
               setProjects(prev => prev.map(p => p.id === id ? { ...p, status } : p))
               // Find project to extract code
               const proj = projects.find(p => p.id === id);
-              const codeNum = proj?.code ? proj.code.replace(/^P-/i, '') : '';
-              const apecId = codeNum && /^\d+$/.test(codeNum) ? Number(codeNum) : id;
-              // API update
-              try {
-                await fetch('/api/v1/apec-global/projects', {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id: apecId, status }),
-                });
-              } catch (e) {
-                console.warn('Lỗi đồng bộ Apec Global khi chuyển trạng thái dự án:', e);
+              const codeNum = proj?.code ? String(proj.code).replace(/^P-/i, '') : '';
+              const rawIdClean = String(id || '').replace(/^(apec_prj_|apec_|prj_|p-)+/i, '');
+              const apecId = codeNum && /^\d+$/.test(codeNum) ? Number(codeNum) : (/^\d+$/.test(rawIdClean) ? Number(rawIdClean) : null);
+              // API update only if numeric APEC ID is available
+              if (apecId) {
+                try {
+                  await fetch('/api/v1/apec-global/projects', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      id: apecId,
+                      name: proj?.name || 'Dự án',
+                      status,
+                      company_id: (proj as any)?.company_id || (proj as any)?.organization_id || 6,
+                    }),
+                  });
+                } catch (e) {
+                  console.warn('Lỗi đồng bộ Apec Global khi chuyển trạng thái dự án:', e);
+                }
               }
-              const isUuidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+              const isUuidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
               if (isUuidId) {
                 await supabase.from('projects').update({ status }).eq('id', id);
               }

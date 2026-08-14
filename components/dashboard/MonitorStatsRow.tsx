@@ -1,19 +1,24 @@
 'use client'
 
 import React from 'react'
-import { FolderOpen, AlertTriangle, CheckCircle2, Clock, ShieldAlert, Users, Lightbulb, FolderKanban } from 'lucide-react'
+import { FolderOpen, AlertTriangle, CheckCircle2, Clock, ShieldAlert, Users, Lightbulb, FolderKanban, Timer, FileWarning } from 'lucide-react'
 
 interface MonitorStatsRowProps {
   stats: {
     totalProjects: number
     activeProjects: number
     completedProjects: number
+    overdueProjects: number
+    planningProjects: number
     totalIncidents: number
     unresolvedIncidents: number
     totalStaff: number
     totalImprovements: number
     totalTasks: number
     completedTasks: number
+    inProgressTasks: number
+    todoTasks: number
+    avgProgress: number
   }
 }
 

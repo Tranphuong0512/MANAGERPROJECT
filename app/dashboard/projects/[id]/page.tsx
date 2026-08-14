@@ -725,26 +725,43 @@ export default function ProjectDetailPage() {
 
   const handleUpdateStatus = async (newStatus: string) => {
     try {
-      try {
-        await fetch('/api/v1/apec-global/projects', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: project.id, status: newStatus }),
-        });
-      } catch (e) {
-        console.warn('Lỗi đồng bộ APEC GLOBAL khi cập nhật trạng thái dự án:', e);
+      // Trích xuất ID số cho APEC GLOBAL nếu có (ví dụ: code "P-62" -> 62 hoặc id "apec_prj_62" -> 62)
+      const codeNum = project.code ? String(project.code).replace(/^P-/i, '') : '';
+      const rawIdClean = String(project.id || '').replace(/^(apec_prj_|apec_|prj_|p-)+/i, '');
+      const apecId = codeNum && /^\d+$/.test(codeNum) ? Number(codeNum) : (/^\d+$/.test(rawIdClean) ? Number(rawIdClean) : null);
+
+      if (apecId) {
+        try {
+          await fetch('/api/v1/apec-global/projects', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: apecId,
+              name: project.name || 'Dự án',
+              status: newStatus,
+              company_id: (project as any).company_id || (project as any).organization_id || 6,
+              start_date: project.start_date,
+              end_date: project.end_date,
+            }),
+          });
+        } catch (e) {
+          console.warn('Lỗi đồng bộ APEC GLOBAL khi cập nhật trạng thái dự án:', e);
+        }
       }
 
-      const { error } = await supabase
-        .from('projects')
-        .update({ status: newStatus })
-        .eq('id', project.id)
+      const isUuidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(project.id));
+      if (isUuidId) {
+        const { error } = await supabase
+          .from('projects')
+          .update({ status: newStatus })
+          .eq('id', project.id);
 
-      if (error) throw error
-      setProject({ ...project, status: newStatus })
+        if (error) throw error;
+      }
+      setProject({ ...project, status: newStatus });
     } catch (err) {
-      console.error('Error updating status:', err)
-      await customAlert('Không thể cập nhật trạng thái')
+      console.error('Error updating status:', err);
+      await customAlert('Không thể cập nhật trạng thái');
     }
   }
 

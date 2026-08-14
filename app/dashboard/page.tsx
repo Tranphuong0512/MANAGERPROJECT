@@ -46,12 +46,17 @@ export default function DashboardPage() {
     totalProjects: 0,
     activeProjects: 0,
     completedProjects: 0,
+    overdueProjects: 0,
+    planningProjects: 0,
     totalIncidents: 0,
     unresolvedIncidents: 0,
     totalStaff: 0,
     totalImprovements: 0,
     totalTasks: 0,
     completedTasks: 0,
+    inProgressTasks: 0,
+    todoTasks: 0,
+    avgProgress: 0,
   })
 
   useEffect(() => {
@@ -84,7 +89,7 @@ export default function DashboardPage() {
         const incidentsPromise = supabase
           .from('incidents')
           .select('*, projects(name)')
-          .in('organization_id', orgIds)
+          .or(`organization_id.in.(${orgIds.join(',')}),organization_id.is.null`)
           .is('deleted_at', null)
           .order('created_at', { ascending: false });
 
@@ -172,26 +177,141 @@ export default function DashboardPage() {
           })
         }
 
+        // Gộp thêm tasks từ APEC Global API & phát hiện Incidents từ APEC
+        let apecTasksData: any[] = []
+        let apecTasksRawItems: any[] = []
+        try {
+          const apecTasksRes = await fetch('/api/v1/apec-global/tasks').then(r => r.json()).catch(() => ({ success: false, items: [] }))
+          if (apecTasksRes.success && apecTasksRes.items) {
+            apecTasksRawItems = apecTasksRes.items || []
+            apecTasksData = apecTasksRawItems.map((t: any) => {
+              let progressVal = Number(t.progress || t.process) || 0
+              const rawStatus = t.status || t.task_status
+              let resolvedStatus = 'todo'
+              if (progressVal >= 100) {
+                resolvedStatus = 'done'
+              } else if (rawStatus && typeof rawStatus === 'object') {
+                const sId = Number(rawStatus.id)
+                if (sId === 4) resolvedStatus = 'done'
+                else if (sId === 3) resolvedStatus = 'review'
+                else if (sId === 2) resolvedStatus = 'in_progress'
+              } else if (typeof rawStatus === 'string') {
+                const s = rawStatus.toLowerCase()
+                if (s === 'done' || s === 'completed') resolvedStatus = 'done'
+                else if (s === 'review') resolvedStatus = 'review'
+                else if (s === 'in_progress') resolvedStatus = 'in_progress'
+              }
+              return { ...t, resolvedStatus }
+            })
+          }
+        } catch (e) {
+          console.warn('APEC tasks fetch for dashboard stats:', e)
+        }
+
+        // Merge Incidents (Supabase + APEC tasks có type là SỰ CỐ & RỦI RO)
+        const apecIncidentTasks = (apecTasksRawItems || []).filter((t: any) => {
+          const typeName = String(t.type?.name || t.type_name || '').toUpperCase()
+          return typeName.includes('SỰ CỐ') || typeName.includes('RỦI RO')
+        })
+
+        const mapApecIncidentStatus = (t: any): string => {
+          const taskProc = Number(t.process ?? t.progress ?? 0)
+          const statusName = String(t.status?.name || t.status || '').toLowerCase()
+          const statusId = Number(t.status?.id || t.task_status?.id || t.status)
+          
+          if (t.is_completed || t.status === 'done' || taskProc >= 100 || statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || statusId === 4) return 'resolved'
+          if (t.status === 'review' || statusName.includes('chờ duyệt') || statusId === 3) return 'review'
+          if (t.status === 'in_progress' || statusName.includes('đang thực hiện') || statusId === 2) return 'investigating'
+          return 'new'
+        }
+
+        const existingIncidentIds = new Set([
+          ...incidentsData.map((i: any) => String(i.id)),
+          ...incidentsData.map((i: any) => String(i.checklist_item_id || '')).filter(Boolean)
+        ])
+
+        const extraApecIncidents = apecIncidentTasks
+          .filter((t: any) => !existingIncidentIds.has(String(t.id)))
+          .map((t: any) => ({
+            id: String(t.id),
+            title: t.name || t.title || '',
+            status: mapApecIncidentStatus(t),
+            created_at: t.created_at || new Date().toISOString(),
+            _from_apec: true,
+          }))
+
+        const combinedIncidents = [
+          ...incidentsData.map((inc: any) => {
+            let currentStatus = inc.status
+            const apecTask = (apecTasksRawItems || []).find((t: any) => 
+              String(t.id) === String(inc.checklist_item_id || inc.id) ||
+              `apec_${t.id}` === String(inc.checklist_item_id) ||
+              (t.name && inc.title && t.name.trim().toLowerCase() === inc.title.trim().toLowerCase())
+            )
+            if (apecTask) {
+              currentStatus = mapApecIncidentStatus(apecTask)
+            }
+            return { ...inc, status: currentStatus }
+          }),
+          ...extraApecIncidents
+        ]
+
         setProjects(projectsData)
         setTasks(tasksData)
         setActivities(activitiesData)
+        setIncidents(combinedIncidents)
 
-        // Tính toán Stats
-        const totalInc = incidentsData.length
-        const unresolvedInc = incidentsData.filter((inc: any) =>
-          inc.status === 'new' || inc.status === 'investigating' || inc.status === 'fixing'
+        // Tính toán Stats Sự Cố
+        const totalInc = combinedIncidents.length
+        const unresolvedInc = combinedIncidents.filter((inc: any) =>
+          inc.status !== 'resolved' && inc.status !== 'closed' && inc.status !== 'fixed'
         ).length
+
+        // Gộp tasks Supabase + APEC (tránh duplicate)
+        const supabaseTaskStatuses = tasksData.map((t: any) => t.status)
+        const apecDone = apecTasksData.filter(t => t.resolvedStatus === 'done').length
+        const apecInProgress = apecTasksData.filter(t => t.resolvedStatus === 'in_progress' || t.resolvedStatus === 'review').length
+        const apecTodo = apecTasksData.filter(t => t.resolvedStatus === 'todo').length
+        const supabaseDone = supabaseTaskStatuses.filter((s: string) => s === 'done').length
+        const supabaseInProgress = supabaseTaskStatuses.filter((s: string) => s === 'in_progress' || s === 'in_review').length
+        const supabaseTodo = supabaseTaskStatuses.filter((s: string) => s === 'todo').length
+
+        const combinedTotalTasks = tasksData.length + apecTasksData.length
+        const combinedCompletedTasks = supabaseDone + apecDone
+        const combinedInProgress = supabaseInProgress + apecInProgress
+        const combinedTodo = supabaseTodo + apecTodo
+
+        // Tính overdue projects
+        const now = new Date()
+        const overdueProjects = projectsData.filter((p: any) => {
+          if (p.status === 'overdue') return true
+          if (p.end_date && (p.status === 'active' || p.status === 'in_progress' || p.status === 'planning')) {
+            return new Date(p.end_date) < now
+          }
+          return false
+        }).length
+
+        // Tính tiến độ trung bình
+        const projectsWithProgress = projectsData.filter((p: any) => p.progress_percentage > 0)
+        const avgProgress = projectsWithProgress.length > 0
+          ? Math.round(projectsWithProgress.reduce((sum: number, p: any) => sum + (p.progress_percentage || 0), 0) / projectsWithProgress.length)
+          : 0
 
         setStats({
           totalProjects: projectsData.length,
-          activeProjects: projectsData.filter(p => p.status === 'active').length,
-          completedProjects: projectsData.filter(p => p.status === 'completed').length,
+          activeProjects: projectsData.filter((p: any) => p.status === 'active' || p.status === 'in_progress').length,
+          completedProjects: projectsData.filter((p: any) => p.status === 'completed' || p.status === 'done').length,
+          overdueProjects,
+          planningProjects: projectsData.filter((p: any) => p.status === 'planning' || p.status === 'not_started').length,
           totalIncidents: totalInc,
           unresolvedIncidents: unresolvedInc,
           totalStaff,
           totalImprovements,
-          totalTasks: tasksData.length,
-          completedTasks: tasksData.filter(t => t.status === 'done').length
+          totalTasks: combinedTotalTasks,
+          completedTasks: combinedCompletedTasks,
+          inProgressTasks: combinedInProgress,
+          todoTasks: combinedTodo,
+          avgProgress,
         })
 
       } catch (err: any) {

@@ -210,15 +210,11 @@ function IncidentsPageContent() {
         const mapApecStatus = (statusId: any, t: any): string => {
           const taskProc = Number(t.process ?? t.progress ?? 0);
           const statusName = String(t.status?.name || t.status || '').toLowerCase();
+          const id = Number(statusId || t.status?.id || t.task_status?.id || t.status);
           
-          if (t.is_completed || t.status === 'done' || taskProc >= 100 || statusName.includes('hoàn thành') || statusName.includes('đã duyệt')) return 'resolved';
-          if (t.status === 'review' || statusName.includes('chờ duyệt')) return 'review';
-          if (t.status === 'in_progress' || statusName.includes('đang thực hiện')) return 'investigating';
-          
-          const id = Number(statusId);
-          if (id === 4) return 'resolved';
-          if (id === 3) return 'review';
-          if (id === 2) return 'investigating';
+          if (id === 4 || t.is_completed || t.status === 'done' || statusName.includes('hoàn thành') || statusName.includes('đã duyệt')) return 'resolved';
+          if (id === 3 || t.status === 'review' || statusName.includes('chờ duyệt') || taskProc >= 100) return 'review';
+          if (id === 2 || taskProc > 0 || t.status === 'in_progress' || statusName.includes('đang')) return 'investigating';
           return 'new';
         };
         // Map APEC priority_id → severity
@@ -271,11 +267,13 @@ function IncidentsPageContent() {
           ...incidentsData.map((inc: any) => {
             let currentStatus = inc.status
             if (apecTasksRes.items) {
-              const apecTask = (apecTasksRes.items as any[]).find((t: any) => 
-                String(t.id) === String(inc.checklist_item_id || inc.id) ||
-                `apec_${t.id}` === String(inc.checklist_item_id) ||
-                (t.name && inc.title && t.name.trim().toLowerCase() === inc.title.trim().toLowerCase())
-              )
+              const cleanIncId = String(inc.checklist_item_id || inc.id || '').replace(/^apec_/, '').replace(/^inc_/, '').replace(/^imp_/, '');
+              const apecTask = (apecTasksRes.items as any[]).find((t: any) => {
+                const cleanTaskId = String(t.id || '').replace(/^apec_/, '');
+                return cleanTaskId === cleanIncId ||
+                       (t.name && inc.title && t.name.trim().toLowerCase() === inc.title.trim().toLowerCase()) ||
+                       (t.title && inc.title && t.title.trim().toLowerCase() === inc.title.trim().toLowerCase());
+              });
               if (apecTask) {
                 const statusId = apecTask.status?.id || apecTask.task_status?.id || apecTask.status_id || apecTask.task_status_id || apecTask.status
                 const mappedApec = mapApecStatus(statusId, apecTask)
@@ -442,15 +440,11 @@ function IncidentsPageContent() {
         const mapApecStatus = (statusId: any, t: any): string => {
           const taskProc = Number(t.process ?? t.progress ?? 0);
           const statusName = String(t.status?.name || t.status || '').toLowerCase();
+          const id = Number(statusId || t.status?.id || t.task_status?.id || t.status);
           
-          if (t.is_completed || t.status === 'done' || taskProc >= 100 || statusName.includes('hoàn thành') || statusName.includes('đã duyệt')) return 'implemented';
-          if (t.status === 'review' || statusName.includes('chờ duyệt')) return 'review';
-          if (t.status === 'in_progress' || statusName.includes('đang thực hiện')) return 'in_progress';
-          
-          const id = Number(statusId);
-          if (id === 4) return 'implemented';
-          if (id === 3) return 'review';
-          if (id === 2) return 'in_progress';
+          if (id === 4 || t.is_completed || t.status === 'done' || statusName.includes('hoàn thành') || statusName.includes('đã duyệt')) return 'implemented';
+          if (id === 3 || t.status === 'review' || statusName.includes('chờ duyệt') || taskProc >= 100) return 'review';
+          if (id === 2 || taskProc > 0 || t.status === 'in_progress' || statusName.includes('đang')) return 'in_progress';
           return 'pending';
         };
 
@@ -504,11 +498,13 @@ function IncidentsPageContent() {
           ...improvementsData.map(imp => {
             let currentStatus = imp.status
             if (apecTasksRes.items) {
-               const apecTask = (apecTasksRes.items as any[]).find((t: any) => 
-                 String(t.id) === String(imp.checklist_item_id || imp.id) ||
-                 `apec_${t.id}` === String(imp.checklist_item_id) ||
-                 (t.name && imp.title && t.name.trim().toLowerCase() === imp.title.trim().toLowerCase())
-               )
+               const cleanImpId = String(imp.checklist_item_id || imp.id || '').replace(/^apec_/, '').replace(/^inc_/, '').replace(/^imp_/, '');
+               const apecTask = (apecTasksRes.items as any[]).find((t: any) => {
+                 const cleanTaskId = String(t.id || '').replace(/^apec_/, '');
+                 return cleanTaskId === cleanImpId ||
+                        (t.name && imp.title && t.name.trim().toLowerCase() === imp.title.trim().toLowerCase()) ||
+                        (t.title && imp.title && t.title.trim().toLowerCase() === imp.title.trim().toLowerCase());
+               });
                
                if (apecTask) {
                  const statusId = apecTask.status?.id || apecTask.task_status?.id || apecTask.status_id || apecTask.task_status_id || apecTask.status

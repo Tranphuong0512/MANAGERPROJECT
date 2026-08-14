@@ -284,8 +284,17 @@ export async function PUT(
       invalidateCache('apec-global:');
       invalidateCache('stats:');
       invalidateCache('board-data:');
+      return NextResponse.json(result, { status: 200 });
     }
-    return NextResponse.json(result, { status: result.success ? 200 : 400 });
+    const statusCode = (result as any)?.status || 400;
+    return NextResponse.json(
+      {
+        ...result,
+        success: false,
+        error: result?.error || result?.message || 'Không thể cập nhật trên APEC GLOBAL',
+      },
+      { status: statusCode }
+    );
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'Internal Server Error' },

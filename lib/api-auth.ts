@@ -69,5 +69,19 @@ export async function authenticateApiRequest(request: NextRequest): Promise<ApiA
     }
   }
 
-  return { authorized: false, error: 'Missing authentication headers (x-api-key or Authorization Bearer)', supabase }
+  // 3. Try cookie session from Supabase Client (for Web App clients)
+  try {
+    const { data: { user }, error: cookieAuthError } = await supabase.auth.getUser()
+    if (user && !cookieAuthError) {
+      return {
+        authorized: true,
+        userId: user.id,
+        supabase
+      }
+    }
+  } catch {
+    // Ignore cookie resolution errors and fallback to unauthorized response
+  }
+
+  return { authorized: false, error: 'Missing authentication headers (x-api-key or Authorization Bearer) or active session', supabase }
 }

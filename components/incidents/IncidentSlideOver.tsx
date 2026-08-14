@@ -162,28 +162,36 @@ export function IncidentSlideOver({ incident: initialIncident, members = [], onC
         }).eq('id', incident.checklist_item_id);
       }
 
-      try {
-        const isCompleted = formData.status === 'resolved' || formData.status === 'closed'
-        const syncProgress = isCompleted ? 100 
-          : (formData.status === 'investigating' || formData.status === 'fixing') ? 50 
-          : 0
-        await fetch('/api/v1/apec-global/tasks', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: String(incident.checklist_item_id || incident.id).replace(/^apec_/, ''),
-            title: formData.title,
-            description: formData.description,
-            status: formData.status,
-            is_completed: isCompleted,
-            process: syncProgress,
-            progress: syncProgress,
-            reporter_id: formData.reported_by ? String(formData.reported_by).replace(/^apec_/, '') : null,
-            assignee_id: formData.assigned_to ? String(formData.assigned_to).replace(/^apec_/, '') : null
-          })
-        });
-      } catch (apecErr) {
-        console.warn('Lỗi đồng bộ sự cố lên APEC GLOBAL:', apecErr);
+      const rawTargetId = String(incident.checklist_item_id || incident.id || '').replace(/^(apec_type_t_|apec_type_|apec_emp_|apec_prj_|apec_|ea_inc_|ea_imp_|inc_|imp_|t_)+/i, '');
+      const isNumericApec = /^\d+$/.test(rawTargetId);
+
+      if (isNumericApec) {
+        try {
+          const isCompleted = formData.status === 'resolved' || formData.status === 'closed';
+          const syncProgress = isCompleted ? 100 
+            : (formData.status === 'review') ? 100
+            : (formData.status === 'investigating' || formData.status === 'fixing') ? 50 
+            : 0;
+          const syncStatus = isCompleted ? 'done' : (formData.status === 'review' ? 'review' : (formData.status === 'investigating' || formData.status === 'fixing' ? 'in_progress' : 'todo'));
+          await fetch('/api/v1/apec-global/tasks', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: Number(rawTargetId),
+              title: formData.title,
+              name: formData.title,
+              description: formData.description,
+              status: syncStatus,
+              is_completed: isCompleted,
+              process: syncProgress,
+              progress: syncProgress,
+              reporter_id: formData.reported_by ? String(formData.reported_by).replace(/^apec_/, '') : null,
+              assignee_id: formData.assigned_to ? String(formData.assigned_to).replace(/^apec_/, '') : null
+            })
+          });
+        } catch (apecErr) {
+          console.warn('Lỗi đồng bộ sự cố lên APEC GLOBAL:', apecErr);
+        }
       }
       
       const newReporter = members.find(m => m.id === formData.reported_by)

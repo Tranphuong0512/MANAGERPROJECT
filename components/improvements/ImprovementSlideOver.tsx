@@ -111,10 +111,11 @@ export function ImprovementSlideOver({ improvement: initialImprovement, members 
 
       if (improvement.checklist_item_id) {
         const newItemStatus = formData.status === 'implemented' ? 'done'
+          : formData.status === 'review' ? 'review'
           : formData.status === 'in_progress' ? 'in_progress'
           : formData.status === 'rejected' ? 'todo'
           : 'todo';
-        const newProgress = newItemStatus === 'done' ? 100 : (newItemStatus === 'in_progress' ? 50 : 0);
+        const newProgress = newItemStatus === 'done' || newItemStatus === 'review' ? 100 : (newItemStatus === 'in_progress' ? 50 : 0);
         await supabase.from('checklist_items').update({
           status: newItemStatus,
           progress: newProgress,
@@ -123,22 +124,31 @@ export function ImprovementSlideOver({ improvement: initialImprovement, members 
         }).eq('id', improvement.checklist_item_id);
       }
 
-      try {
-        await fetch('/api/v1/apec-global/tasks', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: String(improvement.id).replace(/^apec_/, ''),
-            title: formData.title,
-            description: formData.description,
-            status: formData.status,
-            is_completed: formData.status === 'implemented',
-            process: formData.status === 'implemented' ? 100 : formData.status === 'in_progress' ? 50 : 0,
-            progress: formData.status === 'implemented' ? 100 : formData.status === 'in_progress' ? 50 : 0
-          })
-        });
-      } catch (apecErr) {
-        console.warn('Lỗi đồng bộ cải tiến lên APEC GLOBAL:', apecErr);
+      const rawTargetId = String(improvement.checklist_item_id || improvement.id || '').replace(/^(apec_type_t_|apec_type_|apec_emp_|apec_prj_|apec_|ea_inc_|ea_imp_|inc_|imp_|t_)+/i, '');
+      const isNumericApec = /^\d+$/.test(rawTargetId);
+
+      if (isNumericApec) {
+        try {
+          const isCompleted = formData.status === 'implemented';
+          const syncProgress = isCompleted ? 100 : (formData.status === 'review' ? 100 : (formData.status === 'in_progress' ? 50 : 0));
+          const syncStatus = isCompleted ? 'done' : (formData.status === 'review' ? 'review' : (formData.status === 'in_progress' ? 'in_progress' : 'todo'));
+          await fetch('/api/v1/apec-global/tasks', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: Number(rawTargetId),
+              title: formData.title,
+              name: formData.title,
+              description: formData.description,
+              status: syncStatus,
+              is_completed: isCompleted,
+              process: syncProgress,
+              progress: syncProgress
+            })
+          });
+        } catch (apecErr) {
+          console.warn('Lỗi đồng bộ cải tiến lên APEC GLOBAL:', apecErr);
+        }
       }
       
       const newReporter = members.find(m => m.id === formData.reporter_id)

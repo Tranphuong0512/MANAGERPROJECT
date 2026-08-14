@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { TASK_STATUS_LABELS, TASK_STATUS_COLORS, PRIORITY_COLORS } from '@/lib/constants'
 import { CreateTaskDialog } from '@/components/tasks/create-task-dialog'
 import { customAlert, customConfirm } from '@/utils/alert'
+import { usePermissions } from '@/hooks/usePermissions'
 
 interface Task {
   id: string
@@ -25,6 +26,9 @@ export default function ProjectTasksPage() {
   const params = useParams()
   const router = useRouter()
   const projectId = params.id as string
+  const { hasPermission } = usePermissions()
+  const canCreateTask = hasPermission('create_tasks')
+  const canDeleteTask = hasPermission('delete_tasks')
 
   const [project, setProject] = useState<any>(null)
   const [tasks, setTasks] = useState<Task[]>([])
@@ -127,13 +131,15 @@ export default function ProjectTasksPage() {
           </Link>
           <h1 className="text-3xl font-bold text-slate-900">Công việc - {project.name}</h1>
         </div>
-        <button
-          onClick={() => setShowCreateDialog(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-        >
-          <Plus className="w-5 h-5" />
-          Công việc mới
-        </button>
+        {canCreateTask && (
+          <button
+            onClick={() => setShowCreateDialog(true)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+          >
+            <Plus className="w-5 h-5" />
+            Công việc mới
+          </button>
+        )}
       </div>
 
       {/* View Mode Selector */}
@@ -175,15 +181,17 @@ export default function ProjectTasksPage() {
                       <div className="flex items-start gap-2 mb-2">
                         <GripVertical className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
                         <h4 className="font-medium text-slate-900 flex-1 line-clamp-2">{task.title}</h4>
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault()
-                            handleDeleteTask(task.id)
-                          }}
-                          className="p-1 hover:bg-red-50 rounded"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </button>
+                        {canDeleteTask && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault()
+                              handleDeleteTask(task.id)
+                            }}
+                            className="p-1 hover:bg-red-50 rounded"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </button>
+                        )}
                       </div>
 
                       {task.description && (
@@ -257,15 +265,18 @@ export default function ProjectTasksPage() {
                         )}
                       </div>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault()
-                        handleDeleteTask(task.id)
-                      }}
-                      className="p-1 hover:bg-red-50 rounded ml-4"
-                    >
-                      <Trash2 className="w-4 h-4 text-red-600" />
-                    </button>
+                    {canDeleteTask && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation(); // Stop link click
+                          e.preventDefault()
+                          handleDeleteTask(task.id)
+                        }}
+                        className="p-1 hover:bg-red-50 rounded ml-4 relative z-10"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-600" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </Link>
@@ -273,12 +284,14 @@ export default function ProjectTasksPage() {
           ) : (
             <div className="bg-slate-50 rounded-lg p-12 text-center">
               <p className="text-slate-600 mb-4">Chưa có công việc nào</p>
-              <button
-                onClick={() => setShowCreateDialog(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-              >
-                Create first task
-              </button>
+              {canCreateTask && (
+                <button
+                  onClick={() => setShowCreateDialog(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                >
+                  Create first task
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { useOrganization } from '@/components/providers/organization-provider'
-import { ChevronLeft, FolderKanban, AlertTriangle, Lightbulb, Phone, Mail, CheckCircle2, ChevronRight, ChevronDown, CornerDownRight, Building2, Briefcase, ExternalLink, Filter } from 'lucide-react'
+import { ChevronLeft, FolderKanban, AlertTriangle, Lightbulb, Phone, Mail, CheckCircle2, ChevronRight, ChevronDown, CornerDownRight, Building2, Briefcase, ExternalLink, Filter, Shield, Terminal } from 'lucide-react'
 import Link from 'next/link'
 
 export default function StaffDetailPage() {
@@ -14,12 +14,14 @@ export default function StaffDetailPage() {
   const staffId = params.id as string
 
   const [isLoading, setIsLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'tasks' | 'incidents' | 'improvements'>('tasks')
+  const [activeTab, setActiveTab] = useState<'tasks' | 'incidents' | 'improvements' | 'permissions' | 'logs'>('tasks')
   
   const [staffProfile, setStaffProfile] = useState<any>(null)
   const [tasks, setTasks] = useState<any[]>([])
   const [incidents, setIncidents] = useState<any[]>([])
   const [improvements, setImprovements] = useState<any[]>([])
+  const [userPermissions, setUserPermissions] = useState<any[]>([])
+  const [userAuditLogs, setUserAuditLogs] = useState<any[]>([])
 
   const [expandedTypes, setExpandedTypes] = useState<Record<string, boolean>>({})
   const [expandedDepartments, setExpandedDepartments] = useState<Record<string, boolean>>({})
@@ -85,40 +87,137 @@ export default function StaffDetailPage() {
               phone: staffRow.phone || 'Đang cập nhật',
             };
           } else {
-            // Fallback to organization_members
-            const { data: memberData, error } = await supabase
+            // Fallback to organization_members or profiles
+            const { data: memberData } = await supabase
               .from('organization_members')
               .select(`
-                id, job_title,
+                id, job_title, role_id,
+                user_roles(id, name, description),
                 member_departments(
                   departments(name)
                 ),
-                profiles(full_name, avatar_url, phone)
+                profiles(id, full_name, avatar_url, phone, is_super_admin)
               `)
               .eq('organization_id', orgId)
               .eq('user_id', staffId)
               .is('deleted_at', null)
               .maybeSingle();
 
-            if (!memberData) {
+            let profileRow = (memberData as any)?.profiles;
+            if (!profileRow) {
+              const { data: directProfile } = await supabase
+                .from('profiles')
+                .select('id, full_name, avatar_url, phone, is_super_admin')
+                .eq('id', staffId)
+                .maybeSingle();
+              profileRow = directProfile;
+            }
+
+            if (!memberData && !profileRow) {
               setIsLoading(false);
               return;
             }
-            const data = memberData as any;
+
+            const data = (memberData || {}) as any;
+            const isSuperAdmin = profileRow?.is_super_admin || false;
+            const roleName = data.user_roles?.description || data.user_roles?.name || data.job_title || (isSuperAdmin ? 'Quản trị viên (Super Admin)' : 'Thành viên');
             const deptNames = data.member_departments?.map((md: any) => md.departments?.name).filter(Boolean) || [];
+
             profileData = {
               id: staffId,
-              org_member_id: data.id,
-              full_name: Array.isArray(data.profiles) ? data.profiles[0]?.full_name : data.profiles?.full_name || 'Chưa rõ',
+              org_member_id: data.id || staffId,
+              full_name: Array.isArray(profileRow) ? profileRow[0]?.full_name : profileRow?.full_name || 'Chưa rõ',
               departments: deptNames,
-              role: data.job_title || '-',
+              role: roleName,
+              roleName: data.user_roles?.name,
               email: 'Đang cập nhật',
-              phone: Array.isArray(data.profiles) ? data.profiles[0]?.phone : data.profiles?.phone || 'Đang cập nhật',
+              phone: Array.isArray(profileRow) ? profileRow[0]?.phone : profileRow?.phone || 'Đang cập nhật',
+              isSoftwareAccount: true,
+              is_super_admin: isSuperAdmin,
+              role_id: data.role_id || data.user_roles?.id
             };
           }
         }
 
         setStaffProfile(profileData);
+
+        if (profileData && profileData.isSoftwareAccount) {
+          setActiveTab('permissions' as any);
+          
+          let effectivePermissions: any[] = [];
+
+          // 1. Super Admin hoặc Owner -> Đầy đủ toàn bộ quyền hệ thống
+          if (profileData.is_super_admin || profileData.role === 'Quản trị viên (Super Admin)' || profileData.roleName === 'owner') {
+            const { data: allPerms } = await supabase
+              .from('permissions')
+              .select('id, name, description, category')
+              .order('category');
+            if (allPerms) {
+              effectivePermissions = allPerms;
+            }
+          } else {
+            // 2. Tìm permissions theo role_id
+            let targetRoleId = profileData.role_id;
+
+            if (!targetRoleId) {
+              const { data: userRoles } = await supabase.from('user_roles').select('id, name, description');
+              const found = userRoles?.find((r: any) => 
+                r.name === profileData.roleName || 
+                r.name === profileData.role || 
+                r.description === profileData.role ||
+                r.name === 'member'
+              ) || userRoles?.[0];
+              targetRoleId = found?.id;
+            }
+
+            if (targetRoleId) {
+              const { data: rolePerms } = await supabase
+                .from('role_permissions')
+                .select(`
+                  permission_id,
+                  permissions(id, name, description, category)
+                `)
+                .eq('role_id', targetRoleId);
+              
+              if (rolePerms && rolePerms.length > 0) {
+                effectivePermissions = rolePerms.map((rp: any) => rp.permissions).filter(Boolean);
+              }
+            }
+
+            // 3. Fallback: Nếu role này chưa gán quyền nào, lấy danh sách quyền cơ bản của vai trò 'member'
+            if (effectivePermissions.length === 0) {
+              const { data: memberRole } = await supabase
+                .from('user_roles')
+                .select('id')
+                .eq('name', 'member')
+                .maybeSingle();
+
+              if (memberRole?.id) {
+                const { data: defaultPerms } = await supabase
+                  .from('role_permissions')
+                  .select('permission_id, permissions(id, name, description, category)')
+                  .eq('role_id', memberRole.id);
+                if (defaultPerms && defaultPerms.length > 0) {
+                  effectivePermissions = defaultPerms.map((rp: any) => rp.permissions).filter(Boolean);
+                }
+              }
+            }
+          }
+
+          setUserPermissions(effectivePermissions);
+
+          // Fetch audit logs by user full name
+          const { data: auditLogs } = await supabase
+            .from('audit_logs')
+            .select('*')
+            .eq('changed_by', profileData.full_name)
+            .order('created_at', { ascending: false })
+            .limit(50);
+          
+          if (auditLogs) {
+            setUserAuditLogs(auditLogs);
+          }
+        }
 
         // Fetch Tasks from APEC GLOBAL, checklist_items, tasks table, and all projects for mapping
         const [checklistRes, tasksRes, apecTasksRes, allProjectsRes] = await Promise.all([
@@ -592,65 +691,204 @@ export default function StaffDetailPage() {
         </div>
 
         {/* OVERALL STATS */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 md:w-auto w-full z-10">
-          <div className="bg-blue-50/70 rounded-2xl p-3.5 text-center border border-blue-100 min-w-[105px]">
-            <div className="text-2xl font-black text-blue-600 mb-0.5">{staffStats.parentCount}</div>
-            <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Công việc cha</div>
-            <div className="text-[10px] font-semibold text-blue-600 mt-0.5">Xong {staffStats.parentCompleted}</div>
-          </div>
-          <div className="bg-indigo-50/70 rounded-2xl p-3.5 text-center border border-indigo-100 min-w-[105px]">
-            <div className="text-2xl font-black text-indigo-600 mb-0.5">{staffStats.subtaskCount}</div>
-            <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Công việc con</div>
-            <div className="text-[10px] font-semibold text-indigo-600 mt-0.5">Xong {staffStats.subtaskCompleted}</div>
-          </div>
-          <div className="bg-rose-50/70 rounded-2xl p-3.5 text-center border border-rose-100 min-w-[105px]">
-            <div className="text-2xl font-black text-rose-600 mb-0.5">{staffStats.riskCount}</div>
-            <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Rủi ro & Sự cố</div>
-            <div className="text-[10px] font-semibold text-rose-600 mt-0.5">Sự cố & rủi ro</div>
-          </div>
-          <div className="bg-amber-50/70 rounded-2xl p-3.5 text-center border border-amber-100 min-w-[105px]">
-            <div className="text-2xl font-black text-amber-600 mb-0.5">{staffStats.improvementCount}</div>
-            <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Cải tiến</div>
-            <div className="text-[10px] font-semibold text-amber-600 mt-0.5">Sáng kiến</div>
-          </div>
-          <div className="bg-red-50/80 rounded-2xl p-3.5 text-center border border-red-200 min-w-[105px] col-span-2 sm:col-span-1">
-            <div className="text-2xl font-black text-red-600 mb-0.5 flex items-center justify-center gap-1">
-              {staffStats.overdueCount > 0 && <AlertTriangle className="w-4 h-4 text-red-600 animate-pulse" />}
-              {staffStats.overdueCount}
+        {staffProfile?.isSoftwareAccount ? (
+          <div className="grid grid-cols-2 gap-3 md:w-auto w-full z-10">
+            <div className="bg-blue-50/70 rounded-2xl p-3.5 text-center border border-blue-100 min-w-[120px]">
+              <div className="text-2xl font-black text-blue-600 mb-0.5">{userPermissions.length}</div>
+              <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Quyền đã gán</div>
+              <div className="text-[10px] font-semibold text-blue-600 mt-0.5">Quyền hạn hệ thống</div>
             </div>
-            <div className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Trễ hạn</div>
-            <div className="text-[10px] font-semibold text-red-600 mt-0.5">Cần xử lý ngay</div>
+            <div className="bg-indigo-50/70 rounded-2xl p-3.5 text-center border border-indigo-100 min-w-[120px]">
+              <div className="text-2xl font-black text-indigo-600 mb-0.5">{userAuditLogs.length}</div>
+              <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Hoạt động ghi nhận</div>
+              <div className="text-[10px] font-semibold text-indigo-600 mt-0.5">Lịch sử thao tác</div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 md:w-auto w-full z-10">
+            <div className="bg-blue-50/70 rounded-2xl p-3.5 text-center border border-blue-100 min-w-[105px]">
+              <div className="text-2xl font-black text-blue-600 mb-0.5">{staffStats.parentCount}</div>
+              <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Công việc cha</div>
+              <div className="text-[10px] font-semibold text-blue-600 mt-0.5">Xong {staffStats.parentCompleted}</div>
+            </div>
+            <div className="bg-indigo-50/70 rounded-2xl p-3.5 text-center border border-indigo-100 min-w-[105px]">
+              <div className="text-2xl font-black text-indigo-600 mb-0.5">{staffStats.subtaskCount}</div>
+              <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Công việc con</div>
+              <div className="text-[10px] font-semibold text-indigo-600 mt-0.5">Xong {staffStats.subtaskCompleted}</div>
+            </div>
+            <div className="bg-rose-50/70 rounded-2xl p-3.5 text-center border border-rose-100 min-w-[105px]">
+              <div className="text-2xl font-black text-rose-600 mb-0.5">{staffStats.riskCount}</div>
+              <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Rủi ro & Sự cố</div>
+              <div className="text-[10px] font-semibold text-rose-600 mt-0.5">Sự cố & rủi ro</div>
+            </div>
+            <div className="bg-amber-50/70 rounded-2xl p-3.5 text-center border border-amber-100 min-w-[105px]">
+              <div className="text-2xl font-black text-amber-600 mb-0.5">{staffStats.improvementCount}</div>
+              <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Cải tiến</div>
+              <div className="text-[10px] font-semibold text-amber-600 mt-0.5">Sáng kiến</div>
+            </div>
+            <div className="bg-red-50/80 rounded-2xl p-3.5 text-center border border-red-200 min-w-[105px] col-span-2 sm:col-span-1">
+              <div className="text-2xl font-black text-red-600 mb-0.5 flex items-center justify-center gap-1">
+                {staffStats.overdueCount > 0 && <AlertTriangle className="w-4 h-4 text-red-600 animate-pulse" />}
+                {staffStats.overdueCount}
+              </div>
+              <div className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Trễ hạn</div>
+              <div className="text-[10px] font-semibold text-red-600 mt-0.5">Cần xử lý ngay</div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* TABS */}
-      <div className="flex gap-2 mb-6 border-b border-slate-200 pb-2">
-        <button 
-          onClick={() => setActiveTab('tasks')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors ${activeTab === 'tasks' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
-        >
-          <FolderKanban className="w-4 h-4" /> Công việc dự án
-        </button>
-        <button 
-          onClick={() => setActiveTab('incidents')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors ${activeTab === 'incidents' ? 'bg-rose-50 text-rose-700' : 'text-slate-600 hover:bg-slate-50'}`}
-        >
-          <AlertTriangle className="w-4 h-4" /> Lịch sử Sự cố
-        </button>
-        <button 
-          onClick={() => setActiveTab('improvements')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors ${activeTab === 'improvements' ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-slate-50'}`}
-        >
-          <Lightbulb className="w-4 h-4" /> Sáng kiến & Cải tiến
-        </button>
-      </div>
+      {staffProfile?.isSoftwareAccount ? (
+        <div className="flex gap-2 mb-6 border-b border-slate-200 pb-2">
+          <button 
+            onClick={() => setActiveTab('permissions' as any)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors ${activeTab === 'permissions' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Shield className="w-4 h-4" /> Phân quyền hệ thống
+          </button>
+          <button 
+            onClick={() => setActiveTab('logs' as any)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors ${activeTab === 'logs' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Terminal className="w-4 h-4" /> Nhật ký hoạt động
+          </button>
+        </div>
+      ) : (
+        <div className="flex gap-2 mb-6 border-b border-slate-200 pb-2">
+          <button 
+            onClick={() => setActiveTab('tasks')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors ${activeTab === 'tasks' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <FolderKanban className="w-4 h-4" /> Công việc dự án
+          </button>
+          <button 
+            onClick={() => setActiveTab('incidents')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors ${activeTab === 'incidents' ? 'bg-rose-50 text-rose-700' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <AlertTriangle className="w-4 h-4" /> Lịch sử Sự cố
+          </button>
+          <button 
+            onClick={() => setActiveTab('improvements')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors ${activeTab === 'improvements' ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Lightbulb className="w-4 h-4" /> Sáng kiến & Cải tiến
+          </button>
+        </div>
+      )}
 
       {/* CONTENT */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 min-h-[400px]">
-        
-        {/* TASKS TAB */}
-        {activeTab === 'tasks' && (
+        {staffProfile?.isSoftwareAccount ? (
+          <>
+            {activeTab === 'permissions' && (
+              <div className="p-6">
+                <h3 className="font-bold text-slate-800 text-lg mb-2 flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-blue-600" /> Vai trò & Quyền hạn
+                </h3>
+                <p className="text-sm text-slate-500 mb-6">
+                  Danh sách chi tiết các quyền hạn được gắn cho vai trò <span className="font-bold text-slate-800">"{staffProfile.role}"</span> của tài khoản này.
+                </p>
+
+                {userPermissions.length === 0 ? (
+                  <div className="p-10 text-center text-slate-400 italic">Vai trò này chưa được phân quyền nào.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {Object.entries(
+                      userPermissions.reduce((acc: Record<string, any[]>, p: any) => {
+                        const cat = p.category || 'Khác';
+                        if (!acc[cat]) acc[cat] = [];
+                        acc[cat].push(p);
+                        return acc;
+                      }, {})
+                    ).map(([category, perms]) => (
+                      <div key={category} className="border border-slate-200 rounded-2xl p-5 bg-slate-50/50">
+                        <h4 className="font-bold text-slate-800 text-sm mb-3 border-b border-slate-200 pb-1.5 capitalize">
+                          Phân loại: {category}
+                        </h4>
+                        <div className="space-y-2">
+                          {perms.map((p: any) => (
+                            <div key={p.id} className="flex items-start gap-2.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-2 flex-shrink-0"></span>
+                              <div>
+                                <div className="text-xs font-bold text-slate-700 font-mono">{p.name}</div>
+                                <div className="text-[11px] text-slate-500">{p.description}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'logs' && (
+              <div className="p-6">
+                <h3 className="font-bold text-slate-800 text-lg mb-2 flex items-center gap-2">
+                  <Terminal className="w-5 h-5 text-indigo-600" /> Nhật ký hoạt động
+                </h3>
+                <p className="text-sm text-slate-500 mb-6">
+                  Lịch sử thao tác chỉnh sửa dữ liệu trên hệ thống của tài khoản này.
+                </p>
+
+                {userAuditLogs.length === 0 ? (
+                  <div className="p-10 text-center text-slate-400 italic">Chưa ghi nhận hoạt động nào của tài khoản này.</div>
+                ) : (
+                  <div className="overflow-x-auto font-sans">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
+                          <th className="pb-3 w-32">Thời gian</th>
+                          <th className="pb-3 w-28">Thao tác</th>
+                          <th className="pb-3 w-32">Đối tượng</th>
+                          <th className="pb-3">ID Đối tượng</th>
+                          <th className="pb-3 w-24">Trạng thái</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium">
+                        {userAuditLogs.map((log: any) => {
+                          let actionColor = 'text-slate-600 bg-slate-100';
+                          if (log.action === 'CREATE') actionColor = 'text-emerald-700 bg-emerald-50';
+                          if (log.action === 'UPDATE') actionColor = 'text-amber-700 bg-amber-50';
+                          if (log.action === 'DELETE') actionColor = 'text-rose-700 bg-rose-50';
+
+                          return (
+                            <tr key={log.id} className="hover:bg-slate-50/50">
+                              <td className="py-3 text-slate-500">
+                                {new Date(log.created_at).toLocaleString('vi-VN')}
+                              </td>
+                              <td className="py-3">
+                                <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${actionColor}`}>
+                                  {log.action}
+                                </span>
+                              </td>
+                              <td className="py-3 text-slate-700 capitalize">
+                                {log.resource_type}
+                              </td>
+                              <td className="py-3 text-slate-500 font-mono select-all text-[11px]">
+                                {log.resource_id}
+                              </td>
+                              <td className="py-3">
+                                <span className={`font-bold ${log.status === 'SUCCESS' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  {log.status}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {/* TASKS TAB */}
+            {activeTab === 'tasks' && (
           <div>
             <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
@@ -1068,7 +1306,8 @@ export default function StaffDetailPage() {
             </div>
           </div>
         )}
-
+          </>
+        )}
       </div>
     </div>
   )

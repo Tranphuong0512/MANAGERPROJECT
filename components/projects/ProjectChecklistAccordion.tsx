@@ -152,6 +152,8 @@ export function ProjectChecklistAccordion({ projectId, organizationId, onProgres
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               id: cleanId,
+              title: item.title || item.name || 'Công việc',
+              name: item.title || item.name || 'Công việc',
               status: newStatus,
               is_completed: isCompleted,
               process: isCompleted ? 100 : newStatus === 'in_progress' ? 50 : 0,

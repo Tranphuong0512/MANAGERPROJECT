@@ -7,8 +7,15 @@ import { CreateIncidentDialog } from '@/components/incidents/CreateIncidentDialo
 import { CreateImprovementDialog } from '@/components/improvements/CreateImprovementDialog'
 import { IncidentSlideOver } from '@/components/incidents/IncidentSlideOver'
 import { ImprovementSlideOver } from '@/components/improvements/ImprovementSlideOver'
+import { usePermissions } from '@/hooks/usePermissions'
 
 export function ProjectBottomSection({ projectId }: { projectId?: string }) {
+  const { hasPermission } = usePermissions()
+  const canCreateIncident = hasPermission('create_incidents')
+  const canEditIncident = hasPermission('edit_incidents')
+  const canCreateImprovement = hasPermission('create_improvements')
+  const canEditImprovement = hasPermission('edit_improvements')
+
   const [incidents, setIncidents] = useState<any[]>([])
   const [improvements, setImprovements] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
@@ -221,12 +228,14 @@ export function ProjectBottomSection({ projectId }: { projectId?: string }) {
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
           <h3 className="font-bold text-slate-800 text-sm">Sự cố & lỗi ghi nhận</h3>
-          <button 
-            onClick={() => setShowIncidentDialog(true)}
-            className="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-blue-600 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
+          {canCreateIncident && (
+            <button 
+              onClick={() => setShowIncidentDialog(true)}
+              className="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-blue-600 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          )}
         </div>
         
         <div className="flex gap-2 mb-4">
@@ -287,12 +296,14 @@ export function ProjectBottomSection({ projectId }: { projectId?: string }) {
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
           <h3 className="font-bold text-slate-800 text-sm">Đề xuất cải tiến</h3>
-          <button 
-            onClick={() => setShowImprovementDialog(true)}
-            className="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-purple-600 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
+          {canCreateImprovement && (
+            <button 
+              onClick={() => setShowImprovementDialog(true)}
+              className="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-purple-600 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          )}
         </div>
         
         <div className="flex gap-2 mb-4">
@@ -498,6 +509,7 @@ export function ProjectBottomSection({ projectId }: { projectId?: string }) {
       <IncidentSlideOver 
         incident={selectedIncident} 
         members={members}
+        canEdit={canEditIncident}
         onClose={() => {
           setSelectedIncident(null)
           loadData() // Refresh data in case of edits
@@ -507,6 +519,7 @@ export function ProjectBottomSection({ projectId }: { projectId?: string }) {
       <ImprovementSlideOver 
         improvement={selectedImprovement} 
         members={members}
+        canEdit={canEditImprovement}
         onClose={() => {
           setSelectedImprovement(null)
           loadData()
