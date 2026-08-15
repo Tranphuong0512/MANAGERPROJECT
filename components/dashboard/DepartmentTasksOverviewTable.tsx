@@ -476,6 +476,79 @@ export function DepartmentTasksOverviewTable({
     )
   }
 
+  // Helper render thời gian hạn chót chi tiết & trực quan
+  const renderDeadlineBadge = (startDate?: string | null, dueDate?: string | null, isDone?: boolean) => {
+    if (!dueDate && !startDate) {
+      return (
+        <div className="flex flex-col text-[11px] text-slate-400">
+          <span className="italic flex items-center gap-1">
+            <Calendar className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
+            Chưa đặt hạn
+          </span>
+        </div>
+      )
+    }
+
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    let daysDiff: number | null = null
+    let isOverdue = false
+    let isToday = false
+
+    if (dueDate) {
+      const d = new Date(dueDate)
+      if (!isNaN(d.getTime())) {
+        d.setHours(0, 0, 0, 0)
+        const diffTime = d.getTime() - now.getTime()
+        daysDiff = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        isToday = daysDiff === 0
+        isOverdue = daysDiff < 0
+      }
+    }
+
+    return (
+      <div className="flex flex-col gap-1 text-[11px]">
+        {dueDate ? (
+          <div className="flex items-center gap-1.5 font-bold text-slate-800">
+            <Calendar className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+            <span>Hạn: {formatVietnamDate(dueDate)}</span>
+          </div>
+        ) : (
+          <div className="text-[11px] text-slate-400 italic">
+            Chưa có hạn chót
+          </div>
+        )}
+
+        {startDate && (
+          <div className="text-[10px] text-slate-500 font-medium pl-5">
+            Bắt đầu: {formatVietnamDate(startDate)}
+          </div>
+        )}
+
+        {!isDone && dueDate && daysDiff !== null && (
+          <div className="pl-5">
+            {isOverdue ? (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                <AlertCircle className="w-3 h-3 text-rose-600" />
+                Quá hạn {Math.abs(daysDiff)} ngày
+              </span>
+            ) : isToday ? (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 animate-pulse">
+                <Clock className="w-3 h-3 text-amber-600" />
+                Hạn hôm nay!
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <Clock className="w-3 h-3 text-emerald-600" />
+                Còn {daysDiff} ngày
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // Helper render màu badge phòng ban
   const getDepartmentColor = (name: string) => {
     const lower = (name || '').toLowerCase()
@@ -816,22 +889,8 @@ export function DepartmentTasksOverviewTable({
                     </td>
 
                     {/* Thời gian / Hạn chót */}
-                    <td className="py-3.5 px-4">
-                      <div className="flex flex-col text-[11px] text-slate-600">
-                        {task.due_date ? (
-                          <span className="font-semibold text-slate-700 flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-slate-400" />
-                            {formatVietnamDate(task.due_date)}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 italic">Chưa đặt hạn</span>
-                        )}
-                        {task.start_date && (
-                          <span className="text-[10px] text-slate-400">
-                            Bắt đầu: {formatVietnamDate(task.start_date)}
-                          </span>
-                        )}
-                      </div>
+                    <td className="py-3.5 px-4 min-w-[150px]">
+                      {renderDeadlineBadge(task.start_date, task.due_date, task.status === 'done')}
                     </td>
 
                     {/* Tiến độ & Trạng thái */}

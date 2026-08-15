@@ -117,13 +117,42 @@ export default function DashboardPage() {
           .is('deleted_at', null)
           .order('name');
 
+        const staffPromise = supabase
+          .from('staff')
+          .select(`
+            id, full_name, email, phone, role, department_id,
+            departments(id, name)
+          `)
+          .in('organization_id', orgIds)
+          .is('deleted_at', null);
+
+        const liveEmpPromise = fetch('/api/v1/apec-global/employees')
+          .then(r => r.json())
+          .catch(() => ({ success: false, items: [] }));
+
+        const apecTasksPromise = fetch('/api/v1/apec-global/tasks')
+          .then(r => r.json())
+          .catch(() => ({ success: false, items: [] }));
+
         // Đợi tất cả fetch độc lập hoàn thành
-        const [projectsRes, incidentsRes, staffCountRes, improvementsCountRes, departmentsRes] = await Promise.all([
+        const [
+          projectsRes,
+          incidentsRes,
+          staffCountRes,
+          improvementsCountRes,
+          departmentsRes,
+          staffRes,
+          liveEmpRes,
+          apecTasksRes
+        ] = await Promise.all([
           projectsPromise,
           incidentsPromise,
           staffCountPromise,
           improvementsCountPromise,
-          departmentsPromise
+          departmentsPromise,
+          staffPromise,
+          liveEmpPromise,
+          apecTasksPromise
         ]);
 
         let projectsData = projectsRes.data || [];
@@ -131,6 +160,37 @@ export default function DashboardPage() {
         const totalStaff = staffCountRes.count || 0;
         const totalImprovements = improvementsCountRes.count || 0;
         const departmentsData = departmentsRes.data || [];
+
+        // Xây dựng bản đồ ánh xạ Nhân sự -> Đúng Phòng Ban (Staff Department Map)
+        const employeeDeptMap = new Map<string, { deptName: string; deptId?: string }>();
+
+        (staffRes.data || []).forEach((st: any) => {
+          const dName = st.departments?.name;
+          if (dName) {
+            if (st.id) employeeDeptMap.set(String(st.id), { deptName: dName, deptId: st.department_id });
+            if (st.full_name) employeeDeptMap.set(st.full_name.trim().toLowerCase(), { deptName: dName, deptId: st.department_id });
+          }
+        });
+
+        if (liveEmpRes.success && Array.isArray(liveEmpRes.items)) {
+          liveEmpRes.items.forEach((e: any) => {
+            const dName = typeof e.department === 'object' && e.department?.name 
+              ? e.department.name 
+              : (typeof e.department === 'string' && e.department.trim() 
+                ? e.department 
+                : (e.department_name || e.dept_name || null));
+            const dId = e.department?.id || e.department_id;
+            
+            if (dName) {
+              if (e.id) {
+                employeeDeptMap.set(String(e.id), { deptName: dName, deptId: String(dId || '') });
+                employeeDeptMap.set(`apec_${e.id}`, { deptName: dName, deptId: String(dId || '') });
+              }
+              if (e.fullname) employeeDeptMap.set(e.fullname.trim().toLowerCase(), { deptName: dName, deptId: String(dId || '') });
+              if (e.name) employeeDeptMap.set(e.name.trim().toLowerCase(), { deptName: dName, deptId: String(dId || '') });
+            }
+          });
+        }
 
         setDepartments(departmentsData)
         setIncidents(incidentsData)
@@ -146,9 +206,9 @@ export default function DashboardPage() {
           const tasksPromise = supabase
             .from('checklist_items')
             .select(`
-              id, title, status, is_completed, end_date, start_date, priority, 
+              id, title, status, is_completed, end_date, start_date, due_date, priority, 
               project_checklists!inner(project_id, projects(id, name, department_id, departments(id, name))),
-              assignee:staff(id, full_name, avatar_url)
+              assignee:staff(id, full_name, avatar_url, department_id, departments(id, name))
             `)
             .in('project_checklists.project_id', projectIds)
             .is('deleted_at', null)
@@ -170,7 +230,7 @@ export default function DashboardPage() {
               title: t.title,
               status: t.status || (t.is_completed ? 'done' : 'todo'),
               priority: t.priority || 'medium',
-              due_date: t.end_date,
+              due_date: t.end_date || t.due_date,
               project_id: t.project_checklists?.project_id,
               projects: { name: t.project_checklists?.projects?.name },
               assignee: t.assignee
@@ -195,35 +255,30 @@ export default function DashboardPage() {
           })
         }
 
-        // Gộp thêm tasks từ APEC Global API & phát hiện Incidents từ APEC
+        // Xử lý tasks từ APEC Global API & phát hiện Incidents từ APEC
         let apecTasksData: any[] = []
         let apecTasksRawItems: any[] = []
-        try {
-          const apecTasksRes = await fetch('/api/v1/apec-global/tasks').then(r => r.json()).catch(() => ({ success: false, items: [] }))
-          if (apecTasksRes.success && apecTasksRes.items) {
-            apecTasksRawItems = apecTasksRes.items || []
-            apecTasksData = apecTasksRawItems.map((t: any) => {
-              let progressVal = Number(t.progress || t.process) || 0
-              const rawStatus = t.status || t.task_status
-              let resolvedStatus = 'todo'
-              if (progressVal >= 100) {
-                resolvedStatus = 'done'
-              } else if (rawStatus && typeof rawStatus === 'object') {
-                const sId = Number(rawStatus.id)
-                if (sId === 4) resolvedStatus = 'done'
-                else if (sId === 3) resolvedStatus = 'review'
-                else if (sId === 2) resolvedStatus = 'in_progress'
-              } else if (typeof rawStatus === 'string') {
-                const s = rawStatus.toLowerCase()
-                if (s === 'done' || s === 'completed') resolvedStatus = 'done'
-                else if (s === 'review') resolvedStatus = 'review'
-                else if (s === 'in_progress') resolvedStatus = 'in_progress'
-              }
-              return { ...t, resolvedStatus }
-            })
-          }
-        } catch (e) {
-          console.warn('APEC tasks fetch for dashboard stats:', e)
+        if (apecTasksRes.success && apecTasksRes.items) {
+          apecTasksRawItems = apecTasksRes.items || []
+          apecTasksData = apecTasksRawItems.map((t: any) => {
+            let progressVal = Number(t.progress || t.process) || 0
+            const rawStatus = t.status || t.task_status
+            let resolvedStatus = 'todo'
+            if (progressVal >= 100) {
+              resolvedStatus = 'done'
+            } else if (rawStatus && typeof rawStatus === 'object') {
+              const sId = Number(rawStatus.id)
+              if (sId === 4) resolvedStatus = 'done'
+              else if (sId === 3) resolvedStatus = 'review'
+              else if (sId === 2) resolvedStatus = 'in_progress'
+            } else if (typeof rawStatus === 'string') {
+              const s = rawStatus.toLowerCase()
+              if (s === 'done' || s === 'completed') resolvedStatus = 'done'
+              else if (s === 'review') resolvedStatus = 'review'
+              else if (s === 'in_progress') resolvedStatus = 'in_progress'
+            }
+            return { ...t, resolvedStatus }
+          })
         }
 
         // Merge Incidents (Supabase + APEC tasks có type là SỰ CỐ & RỦI RO)
@@ -274,14 +329,45 @@ export default function DashboardPage() {
           ...extraApecIncidents
         ]
 
-        // Tạo danh sách công việc toàn diện cho Bảng Thống Kê & Phê Duyệt Phòng Ban
+        // ─── TẠO DANH SÁCH CÔNG VIỆC TỔNG HỢP VỚI ĐÚNG PHÒNG BAN THEO NHÂN SỰ ───
         const overviewSupabaseTasks = (rawChecklistData || []).map((t: any) => {
           const prj = t.project_checklists?.projects
-          const deptName = prj?.departments?.name || prj?.department_name || 'Phòng Dự án'
-          const deptId = prj?.department_id || prj?.departments?.id
           const isDone = t.is_completed || t.status === 'done'
           const isReview = t.status === 'review' || t.status === 'in_review'
           const progressVal = isDone ? 100 : isReview ? 100 : (t.status === 'in_progress' ? 50 : 0)
+
+          // 1. Ưu tiên xác định phòng ban THEO NHÂN SỰ ĐƯỢC PHÂN CÔNG (Assignee Department First)
+          let deptName = t.assignee?.departments?.name
+          let deptId = t.assignee?.department_id
+
+          if (!deptName && t.assignee?.id) {
+            const found = employeeDeptMap.get(String(t.assignee.id))
+            if (found) {
+              deptName = found.deptName
+              deptId = found.deptId
+            }
+          }
+          if (!deptName && t.assignee?.full_name) {
+            const found = employeeDeptMap.get(t.assignee.full_name.trim().toLowerCase())
+            if (found) {
+              deptName = found.deptName
+              deptId = found.deptId
+            }
+          }
+
+          // 2. Nếu công việc chưa có người làm -> lấy theo phòng ban của Dự án
+          if (!deptName) {
+            deptName = prj?.departments?.name || prj?.department_name
+            deptId = prj?.department_id || prj?.departments?.id
+          }
+
+          if (!deptName) {
+            deptName = 'Chung / Chưa phân loại'
+          }
+
+          // 3. Thời gian hạn chót đầy đủ
+          const startDate = t.start_date || null
+          const dueDate = t.end_date || t.due_date || null
 
           return {
             id: t.id,
@@ -296,8 +382,8 @@ export default function DashboardPage() {
               full_name: t.assignee.full_name,
               avatar_url: t.assignee.avatar_url
             } : undefined,
-            start_date: t.start_date,
-            due_date: t.end_date,
+            start_date: startDate,
+            due_date: dueDate,
             progress: progressVal,
             status: (isDone ? 'done' : isReview ? 'review' : (t.status === 'in_progress' ? 'in_progress' : 'todo')) as any,
             priority: (t.priority || 'medium') as any,
@@ -324,33 +410,72 @@ export default function DashboardPage() {
             else if (s === 'in_progress' || s === 'doing') resolvedStatus = 'in_progress'
           }
 
-          // Trích xuất phòng ban từ APEC task
-          let deptName = t.department?.name || t.department_name
-          if (!deptName && Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
-            deptName = t.employee_assignments[0]?.employee?.department_name || t.employee_assignments[0]?.department_name
-          }
-          if (!deptName && t.employee?.department_name) {
-            deptName = t.employee.department_name
-          }
-          if (!deptName) deptName = 'Phòng Nghiệp Vụ'
+          // 1. Trích xuất thông tin người thực hiện
+          let assigneeName = ''
+          let assigneeId: any = undefined
+          let assigneeAvatar = undefined
+          let deptName = ''
+          let deptId: any = undefined
 
-          // Trích xuất người thực hiện
-          let assigneeObj = undefined
-          if (t.employee) {
-            assigneeObj = {
-              id: t.employee.id,
-              full_name: t.employee.fullname || t.employee.name,
-              avatar_url: t.employee.avatar
-            }
-          } else if (Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
-            const emp = t.employee_assignments[0]?.employee
+          if (Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
+            const firstEa = t.employee_assignments[0]
+            const emp = firstEa.employee
             if (emp) {
-              assigneeObj = {
-                id: emp.id,
-                full_name: emp.fullname || emp.name,
-                avatar_url: emp.avatar
-              }
+              assigneeName = emp.fullname || emp.name || ''
+              assigneeId = emp.id
+              assigneeAvatar = emp.avatar
+              deptName = emp.department_name || (typeof emp.department === 'object' ? emp.department?.name : (typeof emp.department === 'string' ? emp.department : ''))
+              deptId = emp.department_id || emp.department?.id
             }
+          }
+
+          if (!assigneeName && t.employee) {
+            assigneeName = t.employee.fullname || t.employee.name || ''
+            assigneeId = t.employee.id
+            assigneeAvatar = t.employee.avatar
+            deptName = t.employee.department_name || (typeof t.employee.department === 'object' ? t.employee.department?.name : (typeof t.employee.department === 'string' ? t.employee.department : ''))
+            deptId = t.employee.department_id || t.employee.department?.id
+          }
+
+          // 2. Tra cứu phòng ban chuẩn theo Nhân Sự từ employeeDeptMap
+          if (!deptName && assigneeId) {
+            const found = employeeDeptMap.get(String(assigneeId)) || employeeDeptMap.get(`apec_${assigneeId}`)
+            if (found) {
+              deptName = found.deptName
+              deptId = found.deptId
+            }
+          }
+          if (!deptName && assigneeName) {
+            const found = employeeDeptMap.get(assigneeName.trim().toLowerCase())
+            if (found) {
+              deptName = found.deptName
+              deptId = found.deptId
+            }
+          }
+
+          // 3. Fallback: Nếu không có người làm -> lấy phòng ban theo task hoặc dự án
+          if (!deptName) {
+            deptName = typeof t.department === 'object' ? t.department?.name : (t.department_name || t.project?.department_name || null)
+            deptId = t.department_id || t.department?.id
+          }
+
+          if (!deptName) {
+            deptName = 'Chung / Chưa phân loại'
+          }
+
+          // 4. Trích xuất thời gian hạn chót đầy đủ từ nhiều nguồn trường dữ liệu
+          let startDate = t.start_date || t.created_at || null
+          let dueDate = t.due_date || t.end_date || t.finish_date || t.target_date || t.completed_date || null
+
+          if (!dueDate && Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
+            const firstEa = t.employee_assignments[0]
+            dueDate = firstEa.completed_date || firstEa.end_date || firstEa.due_date || null
+            if (!startDate && firstEa.start_date) startDate = firstEa.start_date
+          }
+
+          if (!dueDate && Array.isArray(t.subtasks) && t.subtasks.length > 0) {
+            const firstSub = t.subtasks[0]
+            dueDate = firstSub.due_date || firstSub.end_date || null
           }
 
           return {
@@ -359,11 +484,15 @@ export default function DashboardPage() {
             title: t.name || t.title || 'Nhiệm vụ',
             project_id: t.project_id || t.project?.id,
             project_name: t.project?.name || t.project_name || 'Dự án APEC',
-            department_id: t.department_id || t.department?.id,
+            department_id: deptId,
             department_name: deptName,
-            assignee: assigneeObj,
-            start_date: t.start_date,
-            due_date: t.due_date || t.end_date,
+            assignee: assigneeName ? {
+              id: assigneeId,
+              full_name: assigneeName,
+              avatar_url: assigneeAvatar
+            } : undefined,
+            start_date: startDate,
+            due_date: dueDate,
             progress: progressVal,
             status: resolvedStatus,
             priority: (t.priority?.name?.toLowerCase()?.includes('cao') ? 'high' : 'medium') as any,
