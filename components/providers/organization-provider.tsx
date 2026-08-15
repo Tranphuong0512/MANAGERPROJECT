@@ -52,7 +52,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
 
         let orgs: Organization[] = []
 
-        if (profile?.is_super_admin || user.email === 'tranphuong0512@gmail.com') {
+        if (profile?.is_super_admin) {
           if (isMounted) setIsSuperAdmin(true)
           const { data } = await supabase
             .from('organizations')

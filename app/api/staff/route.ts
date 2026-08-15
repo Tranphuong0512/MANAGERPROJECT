@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { getSupabaseAdminClient } from '@/lib/supabase/admin'
 import { executeBiDirectionalSync } from '@/lib/services/apec-bi-sync'
 import { requireAdminRequest } from '@/lib/admin-route-guard'
 
@@ -8,10 +8,7 @@ export async function GET(request: NextRequest) {
     const adminGuard = await requireAdminRequest(request)
     if (!adminGuard.authorized) return adminGuard.response
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabaseAdmin = getSupabaseAdminClient()
 
     // 1. Load profiles
     const { data: profiles, error: profilesError } = await supabaseAdmin
@@ -93,10 +90,7 @@ export async function POST(request: NextRequest) {
 
     const validOrgIds = Array.isArray(organization_ids) ? organization_ids.filter(Boolean) : []
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabaseAdmin = getSupabaseAdminClient()
 
     // 1. Create auth user
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -196,10 +190,7 @@ export async function PUT(request: NextRequest) {
 
     const validOrgIds = Array.isArray(organization_ids) ? organization_ids.filter(Boolean) : []
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabaseAdmin = getSupabaseAdminClient()
 
     let finalFullName = full_name;
     if (!finalFullName) {

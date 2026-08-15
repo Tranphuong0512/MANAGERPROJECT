@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 
 export interface ConcurrencyCheckResult {
   canProceed: boolean;
@@ -30,7 +30,7 @@ export async function checkConcurrencyVersion(
       return { canProceed: true };
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    const supabaseAdmin = getSupabaseAdminClient();
     const { data: existing, error } = await supabaseAdmin
       .from(tableName)
       .select('id, version, updated_at')
@@ -83,7 +83,7 @@ export async function reconcileInboundSync(
       return { shouldUpdate: true };
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    const supabaseAdmin = getSupabaseAdminClient();
     const { data: existing, error } = await supabaseAdmin
       .from(tableName)
       .select('*')

@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 
 export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'SYNC_INBOUND' | 'SYNC_OUTBOUND';
 export type AuditResourceType = 'organization' | 'department' | 'project' | 'staff' | 'checklist' | 'task';
@@ -38,7 +38,7 @@ export async function recordAuditLog(entry: AuditLogEntry): Promise<boolean> {
       return false;
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    const supabaseAdmin = getSupabaseAdminClient();
 
     const logRecord = {
       action: entry.action,
@@ -84,7 +84,7 @@ export async function getAuditLogs(params?: {
 
     if (!supabaseUrl || !serviceRoleKey) return [];
 
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    const supabaseAdmin = getSupabaseAdminClient();
     let query = supabaseAdmin
       .from('audit_logs')
       .select('*')

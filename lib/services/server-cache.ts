@@ -13,7 +13,30 @@ interface CacheEntry<T> {
   isRevalidating?: boolean
 }
 
+const MAX_CACHE_ENTRIES = 500
 const cacheStore = new Map<string, CacheEntry<any>>()
+
+function ensureCapacity() {
+  if (cacheStore.size >= MAX_CACHE_ENTRIES) {
+    const now = Date.now()
+    // First remove any expired entries
+    for (const [k, v] of cacheStore.entries()) {
+      if (now >= v.expireAt) {
+        cacheStore.delete(k)
+      }
+    }
+    // If still over capacity, remove oldest entries (first items in Map iterator)
+    if (cacheStore.size >= MAX_CACHE_ENTRIES) {
+      const excess = cacheStore.size - MAX_CACHE_ENTRIES + 50
+      let deleted = 0
+      for (const k of cacheStore.keys()) {
+        cacheStore.delete(k)
+        deleted++
+        if (deleted >= excess) break
+      }
+    }
+  }
+}
 
 export interface CacheOptions {
   /** Thời gian (ms) dữ liệu được coi là mới hoàn toàn (mặc định 15 giây) */
@@ -40,6 +63,7 @@ export async function getCachedOrFetch<T>(
   // 1. Trường hợp 1: Chưa có trong cache hoặc đã hết hạn hoàn toàn -> fetch trực tiếp
   if (!entry || now >= entry.expireAt) {
     const data = await fetcher()
+    ensureCapacity()
     cacheStore.set(key, {
       data,
       timestamp: now,
@@ -63,6 +87,7 @@ export async function getCachedOrFetch<T>(
       .then(async () => {
         try {
           const freshData = await fetcher()
+          ensureCapacity()
           cacheStore.set(key, {
             data: freshData,
             timestamp: Date.now(),

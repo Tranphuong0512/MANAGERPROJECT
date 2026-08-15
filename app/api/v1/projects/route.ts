@@ -11,27 +11,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: authError || 'Unauthorized' }, { status: 401 })
     }
 
-  let orgId = request.nextUrl.searchParams.get('orgId')
-  
-  // If authenticated via API Key, we can enforce or default to the key's organization
-  if (organizationId) {
-    orgId = organizationId
-  }
+    let orgId = request.nextUrl.searchParams.get('orgId')
+    
+    // If authenticated via API Key, we can enforce or default to the key's organization
+    if (organizationId) {
+      orgId = organizationId
+    }
 
-  if (!orgId) {
-    return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
-  }
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
+    }
 
-  const { data, error } = await supabase
-    .from('projects')
-    .select(`
-      *,
-      project_members (count),
-      tasks (count)
-    `)
-    .eq('organization_id', orgId)
-    .is('deleted_at', null)
-    .order('updated_at', { ascending: false })
+    const { data, error } = await supabase
+      .from('projects')
+      .select(`
+        *,
+        project_members (count),
+        tasks (count)
+      `)
+      .eq('organization_id', orgId)
+      .is('deleted_at', null)
+      .order('updated_at', { ascending: false })
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 })
@@ -51,26 +51,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: authError || 'Unauthorized' }, { status: 401 })
     }
 
-  const body = await request.json()
+    const body = await request.json()
 
-  // Validate input
-  const validation = createProjectSchema.safeParse(body)
-  if (!validation.success) {
-    return NextResponse.json({ error: validation.error.issues }, { status: 400 })
-  }
+    // Validate input
+    const validation = createProjectSchema.safeParse(body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error.issues }, { status: 400 })
+    }
 
-  const { data, error } = await supabase
-    .from('projects')
-    .insert([
-      {
-        ...validation.data,
-        organization_id: organizationId || validation.data.organization_id,
-        created_by: userId || null, // API keys might not have a specific user
-
-      },
-    ])
-    .select()
-    .single()
+    const { data, error } = await supabase
+      .from('projects')
+      .insert([
+        {
+          ...validation.data,
+          organization_id: organizationId || validation.data.organization_id,
+          created_by: userId || null, // API keys might not have a specific user
+        },
+      ])
+      .select()
+      .single()
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 })

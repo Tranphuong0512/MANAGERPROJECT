@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { getSupabaseClient, validateSupabaseConfig } from '@/lib/supabase/server'
+import { getSupabaseAdminClient } from '@/lib/supabase/admin'
 import { SupabaseClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
 
 export type ApiAuthResult = {
   authorized: boolean
@@ -26,19 +28,16 @@ export async function authenticateApiRequest(request: NextRequest): Promise<ApiA
   // 1. Try x-api-key header first
   const apiKey = request.headers.get('x-api-key') || request.headers.get('apikey')
   if (apiKey) {
-    // Note: getSupabaseClient creates a client. For API keys, we might need a service_role client if we want to bypass RLS 
-    // to check the api_keys table, because the request has no cookies.
-    // However, if we just use the service role key internally to fetch:
-    const { createClient } = await import('@supabase/supabase-js')
-    const adminSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    // Sử dụng admin client singleton để tra cứu API key (bypass RLS)
+    const adminSupabase = getSupabaseAdminClient()
+
+    // Hash API key trước khi so sánh với DB (key_hash lưu SHA-256)
+    const hashedKey = crypto.createHash('sha256').update(apiKey).digest('hex')
 
     const { data: keyData, error: keyError } = await adminSupabase
       .from('api_keys')
       .select('organization_id, is_active')
-      .eq('key_hash', apiKey)
+      .eq('key_hash', hashedKey)
       .single()
 
     if (keyError || !keyData || !keyData.is_active) {

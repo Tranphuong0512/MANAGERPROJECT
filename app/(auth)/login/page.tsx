@@ -17,14 +17,15 @@ export default function LoginPage() {
 
   useEffect(() => {
     const savedEmail = localStorage.getItem('nix_remember_email')
-    const savedPassword = localStorage.getItem('nix_remember_password')
     const savedRemember = localStorage.getItem('nix_remember_me')
     
     if (savedRemember === 'true') {
       setRememberMe(true)
       if (savedEmail) setEmail(savedEmail)
-      if (savedPassword) setPassword(savedPassword)
     }
+
+    // Cleanup: xóa mật khẩu cũ đã lưu (nếu có) từ phiên bản trước
+    localStorage.removeItem('nix_remember_password')
   }, [])
 
   const handleEmailLogin = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -48,13 +49,12 @@ export default function LoginPage() {
         return
       }
 
+      // Chỉ lưu email — KHÔNG BAO GIỜ lưu mật khẩu vào localStorage
       if (rememberMe) {
         localStorage.setItem('nix_remember_email', email)
-        localStorage.setItem('nix_remember_password', password)
         localStorage.setItem('nix_remember_me', 'true')
       } else {
         localStorage.removeItem('nix_remember_email')
-        localStorage.removeItem('nix_remember_password')
         localStorage.setItem('nix_remember_me', 'false')
       }
 

@@ -103,16 +103,13 @@ export async function assignEmailToUser(userId: string, realEmail: string) {
       throw new Error(error.message)
     }
 
-    // 2. Send password recovery email so they can set a password and log in
-    const { error: resetError } = await adminClient.auth.admin.inviteUserByEmail(realEmail)
-    // Alternatively, inviteUserByEmail creates a NEW user. We shouldn't use it.
-    // We should use resetPasswordForEmail
-    const { error: resetError2 } = await adminClient.auth.resetPasswordForEmail(realEmail, {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings` // Where to go after resetting
+    // Gửi email reset mật khẩu để người dùng có thể đặt mật khẩu và đăng nhập
+    const { error: resetError } = await adminClient.auth.resetPasswordForEmail(realEmail, {
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings`
     })
 
-    if (resetError2) {
-      console.error('Failed to send reset email, but email was updated:', resetError2)
+    if (resetError) {
+      console.error('Failed to send reset email, but email was updated:', resetError)
     }
 
     return { success: true }
