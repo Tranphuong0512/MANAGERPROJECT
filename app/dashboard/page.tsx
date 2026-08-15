@@ -32,6 +32,10 @@ const IncidentTrendCharts = dynamic(() => import('@/components/dashboard/Inciden
   loading: () => <div className="h-[380px] bg-slate-100 rounded-2xl animate-pulse col-span-3"></div>
 })
 
+const DepartmentTasksOverviewTable = dynamic(() => import('@/components/dashboard/DepartmentTasksOverviewTable').then(mod => mod.DepartmentTasksOverviewTable), {
+  loading: () => <div className="h-[400px] bg-white rounded-2xl border border-slate-200 animate-pulse mb-8"></div>
+})
+
 export default function DashboardPage() {
   const router = useRouter()
   const { activeOrganization, isLoading: isLoadingOrg } = useOrganization()
@@ -41,6 +45,8 @@ export default function DashboardPage() {
   const [incidents, setIncidents] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
   const [tasks, setTasks] = useState<any[]>([])
+  const [departments, setDepartments] = useState<any[]>([])
+  const [overviewTasks, setOverviewTasks] = useState<any[]>([])
 
   const [stats, setStats] = useState({
     totalProjects: 0,
@@ -104,24 +110,35 @@ export default function DashboardPage() {
           .select('id', { count: 'exact', head: true })
           .in('organization_id', orgIds);
 
+        const departmentsPromise = supabase
+          .from('departments')
+          .select('*')
+          .in('organization_id', orgIds)
+          .is('deleted_at', null)
+          .order('name');
+
         // Đợi tất cả fetch độc lập hoàn thành
-        const [projectsRes, incidentsRes, staffCountRes, improvementsCountRes] = await Promise.all([
+        const [projectsRes, incidentsRes, staffCountRes, improvementsCountRes, departmentsRes] = await Promise.all([
           projectsPromise,
           incidentsPromise,
           staffCountPromise,
-          improvementsCountPromise
+          improvementsCountPromise,
+          departmentsPromise
         ]);
 
         let projectsData = projectsRes.data || [];
         const incidentsData = incidentsRes.data || [];
         const totalStaff = staffCountRes.count || 0;
         const totalImprovements = improvementsCountRes.count || 0;
+        const departmentsData = departmentsRes.data || [];
 
+        setDepartments(departmentsData)
         setIncidents(incidentsData)
 
         const projectIds = projectsData.map(p => p.id)
 
         let tasksData: any[] = []
+        let rawChecklistData: any[] = []
         let activitiesData: any[] = []
 
         if (projectIds.length > 0) {
@@ -130,8 +147,8 @@ export default function DashboardPage() {
             .from('checklist_items')
             .select(`
               id, title, status, is_completed, end_date, start_date, priority, 
-              project_checklists!inner(project_id, projects(name)),
-              assignee:staff(full_name, avatar_url)
+              project_checklists!inner(project_id, projects(id, name, department_id, departments(id, name))),
+              assignee:staff(id, full_name, avatar_url)
             `)
             .in('project_checklists.project_id', projectIds)
             .is('deleted_at', null)
@@ -147,6 +164,7 @@ export default function DashboardPage() {
           const [tasksResult, activitiesResult] = await Promise.all([tasksPromise, activitiesPromise]);
 
           if (tasksResult.data) {
+            rawChecklistData = tasksResult.data
             tasksData = tasksResult.data.map((t: any) => ({
               id: t.id,
               title: t.title,
@@ -256,6 +274,107 @@ export default function DashboardPage() {
           ...extraApecIncidents
         ]
 
+        // Tạo danh sách công việc toàn diện cho Bảng Thống Kê & Phê Duyệt Phòng Ban
+        const overviewSupabaseTasks = (rawChecklistData || []).map((t: any) => {
+          const prj = t.project_checklists?.projects
+          const deptName = prj?.departments?.name || prj?.department_name || 'Phòng Dự án'
+          const deptId = prj?.department_id || prj?.departments?.id
+          const isDone = t.is_completed || t.status === 'done'
+          const isReview = t.status === 'review' || t.status === 'in_review'
+          const progressVal = isDone ? 100 : isReview ? 100 : (t.status === 'in_progress' ? 50 : 0)
+
+          return {
+            id: t.id,
+            raw_id: t.id,
+            title: t.title,
+            project_id: prj?.id || t.project_checklists?.project_id,
+            project_name: prj?.name || 'Dự án nội bộ',
+            department_id: deptId,
+            department_name: deptName,
+            assignee: t.assignee ? {
+              id: t.assignee.id,
+              full_name: t.assignee.full_name,
+              avatar_url: t.assignee.avatar_url
+            } : undefined,
+            start_date: t.start_date,
+            due_date: t.end_date,
+            progress: progressVal,
+            status: (isDone ? 'done' : isReview ? 'review' : (t.status === 'in_progress' ? 'in_progress' : 'todo')) as any,
+            priority: (t.priority || 'medium') as any,
+            source: 'supabase' as const,
+          }
+        })
+
+        const overviewApecTasks = (apecTasksRawItems || []).map((t: any) => {
+          const progressVal = Number(t.progress ?? t.process ?? 0)
+          const rawStatus = t.status || t.task_status
+          let resolvedStatus: 'todo' | 'in_progress' | 'review' | 'done' = 'todo'
+          
+          if (progressVal >= 100 || t.is_completed) {
+            resolvedStatus = 'done'
+          } else if (rawStatus && typeof rawStatus === 'object') {
+            const sId = Number(rawStatus.id)
+            if (sId === 4) resolvedStatus = 'done'
+            else if (sId === 3) resolvedStatus = 'review'
+            else if (sId === 2) resolvedStatus = 'in_progress'
+          } else if (typeof rawStatus === 'string') {
+            const s = rawStatus.toLowerCase()
+            if (s === 'done' || s === 'completed' || s === 'approved') resolvedStatus = 'done'
+            else if (s === 'review' || s === 'pending') resolvedStatus = 'review'
+            else if (s === 'in_progress' || s === 'doing') resolvedStatus = 'in_progress'
+          }
+
+          // Trích xuất phòng ban từ APEC task
+          let deptName = t.department?.name || t.department_name
+          if (!deptName && Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
+            deptName = t.employee_assignments[0]?.employee?.department_name || t.employee_assignments[0]?.department_name
+          }
+          if (!deptName && t.employee?.department_name) {
+            deptName = t.employee.department_name
+          }
+          if (!deptName) deptName = 'Phòng Nghiệp Vụ'
+
+          // Trích xuất người thực hiện
+          let assigneeObj = undefined
+          if (t.employee) {
+            assigneeObj = {
+              id: t.employee.id,
+              full_name: t.employee.fullname || t.employee.name,
+              avatar_url: t.employee.avatar
+            }
+          } else if (Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
+            const emp = t.employee_assignments[0]?.employee
+            if (emp) {
+              assigneeObj = {
+                id: emp.id,
+                full_name: emp.fullname || emp.name,
+                avatar_url: emp.avatar
+              }
+            }
+          }
+
+          return {
+            id: `apec_${t.id}`,
+            raw_id: t.id,
+            title: t.name || t.title || 'Nhiệm vụ',
+            project_id: t.project_id || t.project?.id,
+            project_name: t.project?.name || t.project_name || 'Dự án APEC',
+            department_id: t.department_id || t.department?.id,
+            department_name: deptName,
+            assignee: assigneeObj,
+            start_date: t.start_date,
+            due_date: t.due_date || t.end_date,
+            progress: progressVal,
+            status: resolvedStatus,
+            priority: (t.priority?.name?.toLowerCase()?.includes('cao') ? 'high' : 'medium') as any,
+            source: 'apec' as const,
+            employee_assignments: t.employee_assignments || []
+          }
+        })
+
+        const combinedOverviewTasks = [...overviewSupabaseTasks, ...overviewApecTasks]
+        setOverviewTasks(combinedOverviewTasks)
+
         setProjects(projectsData)
         setTasks(tasksData)
         setActivities(activitiesData)
@@ -358,9 +477,26 @@ export default function DashboardPage() {
         <p className="text-sm text-slate-500">Theo dõi tiến độ dự án, sự cố phát sinh và tình trạng xử lý dựa trên dữ liệu thời gian thực.</p>
       </div>
 
+      {/* VỊ TRÍ 1: HÀNG CHỈ SỐ TỔNG QUAN */}
       <MonitorStatsRow stats={stats} />
 
-      {/* HÀNG 1: QUẢN LÝ TIẾN ĐỘ & CÔNG VIỆC (4 CỘT) */}
+      {/* VỊ TRÍ 2: BẢNG THỐNG KÊ & DUYỆT CÔNG VIỆC TOÀN BỘ DỰ ÁN THEO PHÒNG BAN */}
+      <DepartmentTasksOverviewTable
+        initialTasks={overviewTasks}
+        projects={projects}
+        departments={departments}
+        onRefresh={() => {
+          setIsLoading(true)
+          supabase.auth.getUser().then(() => {
+            // trigger re-fetch
+            const ev = new CustomEvent('refresh-dashboard')
+            window.dispatchEvent(ev)
+          })
+        }}
+        isLoading={isLoading}
+      />
+
+      {/* HÀNG TIẾN ĐỘ & CÔNG VIỆC (4 CỘT) */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
         <MiniKanban tasks={tasks} />
         <MiniGantt projects={projects} />
@@ -368,7 +504,7 @@ export default function DashboardPage() {
         <MonitoringActivity activities={activities} />
       </div>
 
-      {/* HÀNG 2: QUẢN LÝ SỰ CỐ & RỦI RO (3 CỘT) */}
+      {/* HÀNG SỰ CỐ & RỦI RO (3 CỘT) */}
       <IncidentTrendCharts incidents={incidents} />
 
     </div>
