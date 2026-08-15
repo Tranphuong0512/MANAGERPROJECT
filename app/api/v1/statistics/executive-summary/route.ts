@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin'
 import { getCachedOrFetch } from '@/lib/services/server-cache'
+import { getApecEmployees } from '@/lib/services/apec-global-api'
 
 // ============================================================================
 // API: EXECUTIVE SUMMARY — THỐNG KÊ TỔNG QUAN LÃNH ĐẠO (OPTIMIZED CONCURRENT & CACHED)
@@ -19,7 +20,8 @@ export async function GET() {
           { data: allProjects },
           { data: allTasks },
           { data: allChecklistItems },
-          { data: staffRows }
+          { data: staffRows },
+          apecEmpRes
         ] = await Promise.all([
           supabaseAdmin.from('organizations').select('id, name').is('deleted_at', null),
           supabaseAdmin
@@ -34,7 +36,10 @@ export async function GET() {
           supabaseAdmin.from('tasks').select('id, status, progress_percentage').is('deleted_at', null),
           supabaseAdmin.from('checklist_items').select('id, status, is_completed').is('deleted_at', null),
           supabaseAdmin.from('staff').select('id, full_name, role, department_id, departments(name)').is('deleted_at', null),
+          getApecEmployees().catch(() => ({ success: false, items: [] as any[] })),
         ]);
+
+        const apecEmployees: any[] = apecEmpRes && Array.isArray((apecEmpRes as any).items) ? (apecEmpRes as any).items : []
 
         // ===== 1. TIẾN ĐỘ DỰ ÁN THEO TỔ CHỨC / CÔNG TY =====
         const projectsByOrgMap = new Map<string, any[]>();
@@ -116,18 +121,48 @@ export async function GET() {
           overdue: 0,
         }
 
-        // ===== 3. NHÂN SỰ THEO PHÒNG BAN =====
+        // ===== 3. NHÂN SỰ THEO PHÒNG BAN (MERGED SUPABASE + APEC GLOBAL) =====
         const staffByDept: Record<string, { name: string; count: number }> = {}
-        for (const s of staffRows || []) {
-          const deptName = (s as any).departments?.name || 'Chưa phân phòng'
-          if (!staffByDept[deptName]) {
-            staffByDept[deptName] = { name: deptName, count: 0 }
+        const uniqueStaff = new Set<string>();
+
+        // Thêm nhân sự APEC Global
+        if (Array.isArray(apecEmployees)) {
+          for (const e of apecEmployees) {
+            const key = (e.fullname || e.name || '').trim().toLowerCase() || String(e.id || '');
+            if (key && !uniqueStaff.has(key)) {
+              uniqueStaff.add(key);
+              const deptName = typeof e.department === 'object' && e.department?.name 
+                ? e.department.name 
+                : (typeof e.department === 'string' && e.department.trim() 
+                  ? e.department 
+                  : (e.department_name || e.dept_name || 'Phòng Nghiệp Vụ'));
+              if (!staffByDept[deptName]) {
+                staffByDept[deptName] = { name: deptName, count: 0 }
+              }
+              staffByDept[deptName].count++
+            }
           }
-          staffByDept[deptName].count++
+        }
+
+        // Thêm nhân sự Supabase Staff nếu chưa có
+        for (const s of staffRows || []) {
+          const key = (s.full_name || '').trim().toLowerCase() || String(s.id || '');
+          if (key && !uniqueStaff.has(key)) {
+            uniqueStaff.add(key);
+            const deptName = (s as any).departments?.name || 'Phòng ban nội bộ'
+            if (!staffByDept[deptName]) {
+              staffByDept[deptName] = { name: deptName, count: 0 }
+            }
+            staffByDept[deptName].count++
+          }
         }
 
         const staffDistribution = Object.values(staffByDept)
           .sort((a, b) => b.count - a.count)
+
+        const totalStaffCount = uniqueStaff.size > 0 
+          ? uniqueStaff.size 
+          : Math.max((apecEmployees || []).length, (staffRows || []).length);
 
         return {
           projectsByCompany: projectsByCompany.sort((a, b) => b.totalProjects - a.totalProjects),
@@ -136,7 +171,7 @@ export async function GET() {
           summary: {
             totalCompanies: projectsByCompany.length,
             totalProjects: projectsByCompany.reduce((s, c) => s + c.totalProjects, 0),
-            totalStaff: (staffRows || []).length,
+            totalStaff: totalStaffCount,
             totalWorkItems: allWorkItems.length,
             overallCompletionRate: allWorkItems.length > 0
               ? Math.round((taskStatusDistribution.done / allWorkItems.length) * 100)

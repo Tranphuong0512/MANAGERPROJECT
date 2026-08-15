@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin'
 import { getCachedOrFetch } from '@/lib/services/server-cache'
+import { getApecEmployees } from '@/lib/services/apec-global-api'
 
 // ============================================================================
 // API: EMPLOYEE WORKLOAD — KHỐI LƯỢNG CÔNG VIỆC NHÂN SỰ THEO THÁNG (OPTIMIZED & CACHED)
@@ -46,7 +47,8 @@ export async function GET(request: Request) {
         const [
           { data: allStaff },
           { data: allTasks },
-          { data: allClItems }
+          { data: allClItems },
+          apecEmpRes
         ] = await Promise.all([
           supabaseAdmin
             .from('staff')
@@ -64,10 +66,43 @@ export async function GET(request: Request) {
             .select('id, status, is_completed, assigned_staff_id, assignee_ids')
             .is('deleted_at', null)
             .gte('created_at', startOfMonth)
-            .lte('created_at', endOfMonth)
+            .lte('created_at', endOfMonth),
+          getApecEmployees().catch(() => ({ success: false, items: [] as any[] }))
         ]);
 
-        const staffPool = allStaff || []
+        const apecEmployees: any[] = apecEmpRes && Array.isArray((apecEmpRes as any).items) ? (apecEmpRes as any).items : []
+
+        // Hợp nhất danh sách nhân sự APEC Global + Supabase Staff (không trùng lặp)
+        const mergedStaffMap = new Map<string, any>();
+
+        if (Array.isArray(apecEmployees)) {
+          for (const e of apecEmployees) {
+            const key = (e.fullname || e.name || '').trim().toLowerCase() || String(e.id || '');
+            if (key) {
+              const deptName = typeof e.department === 'object' && e.department?.name 
+                ? e.department.name 
+                : (typeof e.department === 'string' && e.department.trim() 
+                  ? e.department 
+                  : (e.department_name || e.dept_name || 'Phòng Nghiệp Vụ'));
+              mergedStaffMap.set(key, {
+                id: `apec_${e.id}`,
+                rawId: e.id,
+                full_name: e.fullname || e.name || 'Nhân sự',
+                role: e.position || e.job_title || 'Thành viên',
+                departments: { name: deptName }
+              });
+            }
+          }
+        }
+
+        for (const s of (allStaff || [])) {
+          const key = (s.full_name || '').trim().toLowerCase() || String(s.id || '');
+          if (key && !mergedStaffMap.has(key)) {
+            mergedStaffMap.set(key, s);
+          }
+        }
+
+        const staffPool = Array.from(mergedStaffMap.values())
         const tasksPool = allTasks || []
         const clItemsPool = allClItems || []
 

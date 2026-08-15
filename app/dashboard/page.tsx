@@ -157,9 +157,29 @@ export default function DashboardPage() {
 
         let projectsData = projectsRes.data || [];
         const incidentsData = incidentsRes.data || [];
-        const totalStaff = staffCountRes.count || 0;
         const totalImprovements = improvementsCountRes.count || 0;
         const departmentsData = departmentsRes.data || [];
+
+        // Tính toán chính xác tổng số lượng nhân sự thực tế (APEC Global Live Employees + Supabase Staff + Tài khoản thành viên)
+        const uniqueStaffSet = new Set<string>();
+        if (liveEmpRes.success && Array.isArray(liveEmpRes.items)) {
+          liveEmpRes.items.forEach((e: any) => {
+            const key = (e.fullname || e.name || '').trim().toLowerCase() || String(e.id || '');
+            if (key) uniqueStaffSet.add(key);
+          });
+        }
+        (staffRes.data || []).forEach((st: any) => {
+          const key = (st.full_name || '').trim().toLowerCase() || String(st.id || '');
+          if (key) uniqueStaffSet.add(key);
+        });
+
+        const totalStaff = uniqueStaffSet.size > 0
+          ? uniqueStaffSet.size
+          : Math.max(
+              liveEmpRes.success && Array.isArray(liveEmpRes.items) ? liveEmpRes.items.length : 0,
+              (staffRes.data || []).length,
+              staffCountRes.count || 0
+            );
 
         // Xây dựng bản đồ ánh xạ Nhân sự -> Đúng Phòng Ban (Staff Department Map)
         const employeeDeptMap = new Map<string, { deptName: string; deptId?: string }>();
