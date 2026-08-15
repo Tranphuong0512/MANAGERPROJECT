@@ -10,6 +10,28 @@
 export const APEC_GLOBAL_BASE_URL = 'https://api.apecglobal.net';
 export const APEC_GLOBAL_SECRET_KEY = process.env.APEC_GLOBAL_SECRET_KEY || '';
 
+import type {
+  ApecCompanyRaw,
+  ApecProjectRaw,
+  ApecEmployeeRaw,
+  ApecDepartmentRaw,
+  ApecTaskTypeRaw,
+  ApecTaskRaw,
+  ApecId,
+  ApecStatusRef,
+  ApecAssigneeRef,
+} from '@/lib/types/apec';
+
+export type {
+  ApecCompanyRaw,
+  ApecProjectRaw,
+  ApecEmployeeRaw,
+  ApecDepartmentRaw,
+  ApecTaskTypeRaw,
+  ApecTaskRaw,
+  ApecId,
+};
+
 export interface ApecCompany {
   id: string | number;
   name?: string;
@@ -98,12 +120,19 @@ export interface ApecTask {
   status?: string | number | { id?: string | number; name?: string };
   priority?: string | number | { id?: string | number; name?: string };
   type?: { id: string | number; name?: string };
+  task_type?: { id: string | number; name?: string };
+  task_type_id?: string | number;
   start_date?: string;
   due_date?: string;
   end_date?: string;
   assignee?: string | { id?: string | number; name?: string; avatar?: string };
   progress?: number;
   process?: number;
+  checklist_items?: any[];
+  items?: any[];
+  completed?: boolean;
+  assignments?: ApecEmployeeAssignment[];
+  employees?: Array<{ id: string | number; name?: string; fullname?: string; avatar?: string }>;
   employee_assignments?: ApecEmployeeAssignment[];
   subtasks?: Array<{ id: string | number; name?: string; process?: number; status?: any }>;
   [key: string]: any;
@@ -116,6 +145,17 @@ export interface ApecQueryParams {
   page?: number;
 }
 
+export interface ApecFetchOptions {
+  company_id?: string | number;
+  project_id?: string | number;
+  department_id?: string | number;
+  status?: string | number;
+  from_date?: string;
+  to_date?: string;
+  limit?: number;
+  page?: number;
+}
+
 function getCandidateEndpoints(baseEndpoint: string): string[] {
   const resource = baseEndpoint.split('/').filter(Boolean).pop() || '';
   const singular = resource.endsWith('ies')
@@ -124,86 +164,53 @@ function getCandidateEndpoints(baseEndpoint: string): string[] {
       ? resource.slice(0, -1)
       : resource;
 
-  let extraTasksCandidates: string[] = [];
+  // Thứ tự ưu tiên cao nhất theo chuẩn APEC GLOBAL API (đã xác thực trên production)
+  const prioritized: string[] = [
+    baseEndpoint,
+    `/api/v1/external/${resource}`,
+    `/api/external/${resource}`,
+    `/api/v1/externals/${resource}`,
+    `/api/externals/${resource}`,
+  ];
+
   if (resource === 'tasks' || baseEndpoint.includes('task')) {
-    extraTasksCandidates = [
+    prioritized.push(
       '/api/v1/external/tasks',
       '/api/external/tasks',
-      '/api/v1/jobs',
       '/api/v1/tasks',
-      '/api/v1/work',
-      '/api/v1/works',
       '/api/v1/checklists',
-      '/api/v1/checklist',
-      '/api/v1/project-tasks',
-      '/api/v1/project_tasks',
-      '/api/v1/todos',
-      '/api/v1/issues',
-      '/api/v1/task-list',
-      '/api/v1/tasks-list',
-      '/api/v1/assignments',
-      '/api/v1/task',
-      '/api/v1/project/tasks',
-      '/api/v1/projects/tasks'
-    ];
-  }
-
-  let extraDeptCandidates: string[] = [];
-  if (resource === 'departments' || baseEndpoint.includes('department')) {
-    extraDeptCandidates = [
+      '/api/v1/assignments'
+    );
+  } else if (resource === 'departments' || baseEndpoint.includes('department')) {
+    prioritized.push(
       '/api/v1/external/departments',
       '/api/external/departments',
-      '/api/v1/departments',
-      '/api/v1/externals/departments',
-      '/api/departments',
-    ];
-  }
-
-  let extraTaskTypesCandidates: string[] = [];
-  if (baseEndpoint.includes('tasks/types') || baseEndpoint.includes('task-types') || resource === 'types') {
-    extraTaskTypesCandidates = [
+      '/api/v1/departments'
+    );
+  } else if (baseEndpoint.includes('tasks/types') || baseEndpoint.includes('task-types') || resource === 'types') {
+    prioritized.push(
       '/api/v1/external/tasks/types',
       '/api/external/tasks/types',
-      '/api/v1/externals/task-types',
-      '/api/v1/externals/tasks/types',
       '/api/v1/task-types',
-      '/api/v1/tasks/types',
-      '/api/tasks/types',
-    ];
-  }
-
-  let extraKpiCandidates: string[] = [];
-  if (resource === 'kpi-items' || resource === 'kpi_items' || resource === 'kpis' || baseEndpoint.includes('kpi')) {
-    extraKpiCandidates = [
+      '/api/v1/tasks/types'
+    );
+  } else if (resource.includes('kpi') || baseEndpoint.includes('kpi')) {
+    prioritized.push(
       '/api/v1/external/kpi-items',
       '/api/external/kpi-items',
-      '/api/v1/kpi-items',
-      '/api/v1/external/kpis',
-      '/api/v1/kpis',
-      '/api/kpi-items',
-      '/api/kpis',
-    ];
+      '/api/v1/kpi-items'
+    );
   }
 
-  const candidates = [
-    baseEndpoint,                             // /api/v1/externals/companies
-    ...extraTasksCandidates,
-    ...extraDeptCandidates,
-    ...extraTaskTypesCandidates,
-    ...extraKpiCandidates,
-    `/api/externals/${resource}`,             // /api/externals/companies
-    `/externals/${resource}`,                 // /externals/companies
-    `/api/v1/external/${resource}`,           // /api/v1/external/companies
-    `/api/external/${resource}`,              // /api/external/companies
-    `/api/v1/${resource}`,                    // /api/v1/companies
-    `/api/${resource}`,                       // /api/companies
-    `/${resource}`,                           // /companies
-    `/api/share/${resource}`,                 // /api/share/companies
-    `/api/integration/${resource}`,           // /api/integration/companies
-    `/api/v1/externals/${singular}`,          // /api/v1/externals/company
-    `/api/v1/${singular}`,                    // /api/v1/company
-  ];
-  return Array.from(new Set(candidates));
+  // Fallbacks ngắn gọn nếu các endpoint chính không có
+  prioritized.push(
+    `/api/v1/${resource}`,
+    `/api/${resource}`,
+    `/api/v1/externals/${singular}`,
+    `/api/v1/${singular}`
+  );
+
+  return Array.from(new Set(prioritized));
 }
 
 // In-memory Circuit Breaker state

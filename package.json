@@ -105,10 +105,5 @@
         "repo": "MANAGERPROJECT"
       }
     ]
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "*"
-    ]
   }
 }

@@ -14,14 +14,14 @@ export default defineConfig([
     ],
   },
   {
-    files: ['**/*.{js,mjs,cjs}'],
+    files: ['**/*.{js,mjs,cjs,ts,tsx}'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
     },
     rules: {
       'no-debugger': 'error',
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-unused-vars': 'off', // TypeScript compiler already checks this
     },
   },
 ])

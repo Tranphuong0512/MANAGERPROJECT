@@ -23,7 +23,7 @@ export async function getOrganization(id: string) {
   return data as Organization
 }
 
-export async function createOrganization(data: any) {
+export async function createOrganization(data: Partial<Organization> & { name: string; slug: string }) {
   const { data: org, error } = await supabase
     .from('organizations')
     .insert([data])
@@ -34,7 +34,7 @@ export async function createOrganization(data: any) {
   return org as Organization
 }
 
-export async function updateOrganization(id: string, data: any) {
+export async function updateOrganization(id: string, data: Partial<Organization>) {
   const { data: org, error } = await supabase
     .from('organizations')
     .update({ ...data, updated_at: new Date().toISOString() })
@@ -68,7 +68,7 @@ export async function getDepartmentsByOrg(orgId: string) {
   return data as Department[]
 }
 
-export async function createDepartment(data: any) {
+export async function createDepartment(data: Partial<Department> & { organization_id: string; name: string }) {
   const { data: dept, error } = await supabase
     .from('departments')
     .insert([data])
@@ -79,7 +79,7 @@ export async function createDepartment(data: any) {
   return dept as Department
 }
 
-export async function updateDepartment(id: string, data: any) {
+export async function updateDepartment(id: string, data: Partial<Department>) {
   const { data: dept, error } = await supabase
     .from('departments')
     .update({ ...data, updated_at: new Date().toISOString() })
@@ -104,7 +104,7 @@ export async function getTeamsByDepartment(deptId: string) {
   return data as Team[]
 }
 
-export async function createTeam(data: any) {
+export async function createTeam(data: Partial<Team> & { department_id: string; name: string }) {
   const { data: team, error } = await supabase
     .from('teams')
     .insert([data])
@@ -200,7 +200,7 @@ export async function getProject(id: string) {
   return data as any
 }
 
-export async function createProject(data: any) {
+export async function createProject(data: Partial<Project> & { organization_id: string; name: string }) {
   const { data: project, error } = await supabase
     .from('projects')
     .insert([data])
@@ -211,7 +211,7 @@ export async function createProject(data: any) {
   return project as Project
 }
 
-export async function updateProject(id: string, data: any) {
+export async function updateProject(id: string, data: Partial<Project>) {
   const { data: project, error } = await supabase
     .from('projects')
     .update({
@@ -251,7 +251,7 @@ export async function getProjectTasks(projectId: string) {
     .order('created_at', { ascending: false })
 
   if (error) throw error
-  return data as any[]
+  return data as (Task & { assigned_user?: { full_name: string | null; avatar_url: string | null } })[]
 }
 
 export async function getTask(id: string) {
@@ -268,7 +268,7 @@ export async function getTask(id: string) {
     .single()
 
   if (error) throw error
-  return data as any
+  return data
 }
 
 export async function getTaskSubtasks(taskId: string) {
@@ -283,7 +283,7 @@ export async function getTaskSubtasks(taskId: string) {
   return data as Task[]
 }
 
-export async function createTask(data: any) {
+export async function createTask(data: Partial<Task> & { project_id: string; title: string }) {
   const { data: task, error } = await supabase
     .from('tasks')
     .insert([data])
@@ -293,18 +293,20 @@ export async function createTask(data: any) {
   if (error) throw error
 
   // Record in history
-  await supabase.from('task_history').insert([
-    {
-      task_id: task.id,
-      action: 'created',
-      changed_by: data.created_by,
-    },
-  ])
+  if (data.created_by) {
+    await supabase.from('task_history').insert([
+      {
+        task_id: task.id,
+        action: 'created',
+        changed_by: data.created_by,
+      },
+    ])
+  }
 
   return task as Task
 }
 
-export async function updateTask(id: string, data: any) {
+export async function updateTask(id: string, data: Partial<Task>) {
   const { data: task, error } = await supabase
     .from('tasks')
     .update({

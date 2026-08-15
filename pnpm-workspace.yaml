@@ -1,3 +1,9 @@
+onlyBuiltDependencies:
+  - electron
+  - electron-winstaller
+  - msw
+  - sharp
+
 allowBuilds:
   electron: true
   electron-winstaller: true

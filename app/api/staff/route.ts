@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdminClient } from '@/lib/supabase/admin'
 import { executeBiDirectionalSync } from '@/lib/services/apec-bi-sync'
 import { requireAdminRequest } from '@/lib/admin-route-guard'
+import { checkRateLimit } from '@/lib/rate-limiter'
 
 export async function GET(request: NextRequest) {
   try {
+    const rateLimit = checkRateLimit(request, { maxRequests: 100, windowMs: 60_000, prefix: 'staff_get' })
+    if (!rateLimit.allowed) return rateLimit.response
+
     const adminGuard = await requireAdminRequest(request)
     if (!adminGuard.authorized) return adminGuard.response
 
@@ -79,6 +83,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimit = checkRateLimit(request, { maxRequests: 30, windowMs: 60_000, prefix: 'staff_post' })
+    if (!rateLimit.allowed) return rateLimit.response
+
     const adminGuard = await requireAdminRequest(request)
     if (!adminGuard.authorized) return adminGuard.response
 
@@ -179,6 +186,9 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const rateLimit = checkRateLimit(request, { maxRequests: 30, windowMs: 60_000, prefix: 'staff_put' })
+    if (!rateLimit.allowed) return rateLimit.response
+
     const adminGuard = await requireAdminRequest(request)
     if (!adminGuard.authorized) return adminGuard.response
 
