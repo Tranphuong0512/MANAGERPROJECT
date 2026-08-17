@@ -38,7 +38,7 @@ export function ApecGlobalAutoSyncProvider({ children }: { children: React.React
       }
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout (đủ thời gian cho đồng bộ lớn)
 
       try {
         const res = await fetch('/api/v1/apec-global/auto-sync-all', {
@@ -62,18 +62,17 @@ export function ApecGlobalAutoSyncProvider({ children }: { children: React.React
           setIsSyncing(false);
           setError(null);
         } else {
-           setIsSyncing(false);
+          setIsSyncing(false);
         }
       } catch (err: any) {
         clearTimeout(timeoutId);
         
         const isAbortError = err.name === 'AbortError';
         
-        // Thử lại tối đa 3 lần cho các lỗi mạng hoặc timeout
-        if (retryCount < 3) {
-          const nextInterval = Math.pow(2, retryCount) * 2000; // 2s -> 4s -> 8s
-          console.warn(`[APEC GLOBAL SYNC] Lỗi đồng bộ. Thử lại lần ${retryCount + 1} sau ${nextInterval}ms...`);
-          setError(`Đang hiển thị dữ liệu cache, đang thử kết nối lại... (Lần ${retryCount + 1}/3)`);
+        // Thử lại tối đa 2 lần cho các lỗi mạng hoặc timeout
+        if (retryCount < 2) {
+          const nextInterval = (retryCount + 1) * 3000;
+          console.warn(`[APEC GLOBAL SYNC] Đang thử kết nối lại lần ${retryCount + 1}...`);
           
           setTimeout(() => {
             syncData(retryCount + 1);
@@ -81,11 +80,9 @@ export function ApecGlobalAutoSyncProvider({ children }: { children: React.React
         } else {
           setIsSyncing(false);
           if (isAbortError) {
-            console.warn('[APEC GLOBAL SYNC] Auto-sync timed out, continuing with cached BFF data.');
-            setError('Hệ thống phản hồi chậm, đang sử dụng dữ liệu cache.');
+            console.log('[APEC GLOBAL SYNC] Đồng bộ tự động chạy ngầm, giao diện đang hiển thị dữ liệu tức thì.');
           } else {
-            console.warn('[APEC GLOBAL SYNC] Auto-sync bypassed:', err?.message || err);
-            setError('Không thể đồng bộ dữ liệu lúc này, đang sử dụng dữ liệu cache.');
+            console.log('[APEC GLOBAL SYNC] Sử dụng dữ liệu cache để đảm bảo tốc độ phản hồi.');
           }
         }
       }

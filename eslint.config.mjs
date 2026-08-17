@@ -1,6 +1,6 @@
-import { defineConfig } from 'eslint/config'
+import tsParser from '@typescript-eslint/parser'
 
-export default defineConfig([
+export default [
   {
     ignores: [
       '.next/**',
@@ -16,12 +16,19 @@ export default defineConfig([
   {
     files: ['**/*.{js,mjs,cjs,ts,tsx}'],
     languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+        ecmaFeatures: {
+          jsx: true,
+        },
+        warnOnUnsupportedTypeScriptVersion: false,
+      },
     },
     rules: {
       'no-debugger': 'error',
-      'no-unused-vars': 'off', // TypeScript compiler already checks this
+      'no-unused-vars': 'off',
     },
   },
-])
+]

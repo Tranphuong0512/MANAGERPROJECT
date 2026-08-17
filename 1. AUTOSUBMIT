@@ -1,0 +1,54 @@
+(function () {
+    let isAutoSubmitOn = false;
+
+    // 1. Tạo nút bấm ON/OFF an toàn không lo lỗi bảo mật (TrustedHTML)
+    const toggleBtn = document.createElement('div');
+    toggleBtn.textContent = 'AS OFF';
+    toggleBtn.style.position = 'fixed';
+    toggleBtn.style.bottom = '1px'; // Đẩy xuống một chút để tránh đè các menu hệ thống
+    toggleBtn.style.right = '410px';
+    toggleBtn.style.zIndex = '999999';
+    toggleBtn.style.padding = '6px 8px';
+    toggleBtn.style.backgroundColor = '#ff4d4d';
+    toggleBtn.style.color = 'white';
+    toggleBtn.style.fontFamily = 'Arial, sans-serif';
+    toggleBtn.style.fontSize = '8px';
+    toggleBtn.style.fontWeight = 'bold';
+    toggleBtn.style.borderRadius = '4px';
+    toggleBtn.style.cursor = 'pointer';
+    toggleBtn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.4)';
+    toggleBtn.style.userSelect = 'none';
+    document.body.appendChild(toggleBtn);
+
+    // 2. Xử lý sự kiện Bật/Tắt khi người dùng click vào nút
+    toggleBtn.addEventListener('click', () => {
+        isAutoSubmitOn = !isAutoSubmitOn;
+        if (isAutoSubmitOn) {
+            toggleBtn.textContent = '41🟢AS';
+            toggleBtn.style.backgroundColor = '#2ecc71';
+        } else {
+            toggleBtn.textContent = '🔴AS';
+            toggleBtn.style.backgroundColor = '#ff4d4d';
+        }
+    });
+
+    // 3. Vòng lặp quét sâu và tự động nhấn nút Submit trong hình của bạn
+    setInterval(() => {
+        if (!isAutoSubmitOn) return;
+
+        // Quét tất cả các thẻ có khả năng làm nút bấm trong IDE
+        const targets = document.querySelectorAll('div, span, button, a');
+        targets.forEach(el => {
+            const text = el.textContent ? el.textContent.trim().toLowerCase() : '';
+            
+            // Nhận diện chính xác chữ "submit" (kể cả khi dính icon mũi tên như trong ảnh)
+            if (text.startsWith('submit')) {
+                // Kích hoạt tổ hợp click trực tiếp và giả lập sự kiện chuột
+                el.click();
+                el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            }
+        });
+    }, 350); // Kiểm tra liên tục mỗi 0.35 giây
+
+    console.log("%c[Auto Submit] Đã thiết lập nút điều khiển ON/OFF thành công!", "color: #3498db; font-weight: bold;");
+})();

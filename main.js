@@ -127,29 +127,55 @@ app.whenReady().then(() => {
   createWindow();
 
   if (app.isPackaged) {
-    // Check for updates
-    autoUpdater.checkForUpdatesAndNotify();
+    // Cấu hình tự động tải và nâng cấp ngầm không cần hỏi tải về
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
 
-    autoUpdater.on('update-available', () => {
-      console.log('Update available.');
+    autoUpdater.checkForUpdates().catch(err => console.warn('Initial update check failed:', err));
+
+    autoUpdater.on('update-available', (info) => {
+      console.log('Update available:', info?.version);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-available', info);
+      }
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Hệ thống cập nhật tự động',
+        message: `Phát hiện phiên bản mới (v${info?.version || ''}).\nỨng dụng đang tự động tải và nâng cấp trong nền, quý khách có thể tiếp tục làm việc bình thường.`,
+        buttons: ['Đã hiểu']
+      }).catch(() => {});
+    });
+
+    autoUpdater.on('download-progress', (progressObj) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-progress', progressObj);
+      }
     });
 
     autoUpdater.on('update-downloaded', (info) => {
+      console.log('Update downloaded:', info?.version);
       dialog.showMessageBox({
         type: 'info',
-        title: 'Cập nhật phần mềm',
-        message: 'Có phiên bản mới. Ứng dụng sẽ khởi động lại để cài đặt.',
+        title: 'Nâng cấp phần mềm hoàn tất',
+        message: `Đã tải hoàn tất phiên bản mới (v${info?.version || ''}).\nỨng dụng sẽ tự động áp dụng và khởi động lại ngay bây giờ.`,
         buttons: ['Khởi động lại ngay']
-      }).then((result) => {
-        if (result.response === 0) {
-          autoUpdater.quitAndInstall();
-        }
+      }).then(() => {
+        setImmediate(() => {
+          autoUpdater.quitAndInstall(false, true);
+        });
+      }).catch(() => {
+        autoUpdater.quitAndInstall(false, true);
       });
     });
 
     autoUpdater.on('error', (err) => {
-      console.error('Lỗi khi cập nhật:', err);
+      console.warn('Lỗi khi kiểm tra cập nhật:', err?.message || err);
     });
+
+    // Kiểm tra cập nhật định kỳ mỗi 15 phút
+    setInterval(() => {
+      autoUpdater.checkForUpdates().catch(() => {});
+    }, 15 * 60 * 1000);
   }
 
   app.on('activate', () => {

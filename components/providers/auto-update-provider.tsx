@@ -50,9 +50,9 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
         if (data.update_available) {
           setIsDismissed(false)
           showToast(
-            'success',
-            `🚀 Đã có phiên bản mới v${data.latest_version} phát hành trên GitHub!`,
-            'CẬP NHẬT MỚI REALTIME'
+            'info',
+            `🚀 Đã phát hiện phiên bản mới v${data.latest_version}. Ứng dụng đang tự động nâng cấp trong nền...`,
+            'TỰ ĐỘNG NÂNG CẤP'
           )
         } else if (showNoUpdateToast) {
           showToast(
@@ -109,13 +109,13 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
-                      GitHub Realtime Auto-Update
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                      ⚡ Tự Động Nâng Cấp
                     </span>
                     <span className="text-xs font-bold text-emerald-400">v{updateInfo.latest_version}</span>
                   </div>
                   <h4 className="font-extrabold text-base text-white mt-0.5">
-                    {updateInfo.release_name || `Có bản cập nhật v${updateInfo.latest_version}`}
+                    {updateInfo.release_name || `Đã có bản cập nhật v${updateInfo.latest_version}`}
                   </h4>
                 </div>
               </div>
@@ -123,7 +123,7 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
               <button
                 onClick={dismissUpdate}
                 className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-                title="Để sau"
+                title="Đóng"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -141,29 +141,34 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
               <span>Mới nhất: <strong className="text-emerald-400 font-bold">v{updateInfo.latest_version}</strong></span>
             </div>
 
+            {/* Status & Auto Progress Notice */}
+            <div className="flex items-center justify-between gap-2 p-3 bg-blue-900/30 border border-blue-400/20 rounded-xl mb-3">
+              <div className="flex items-center gap-2 text-xs text-blue-200">
+                <RefreshCw className="w-4 h-4 animate-spin text-blue-400 shrink-0" />
+                <span>Hệ thống đang tự động tải và áp dụng bản nâng cấp...</span>
+              </div>
+            </div>
+
             {/* Action Buttons */}
             <div className="flex items-center gap-2">
-              <a
-                href={updateInfo.exe_download_url || updateInfo.download_url}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
                 onClick={() => setIsDismissed(true)}
-                className="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <Download className="w-4 h-4" />
-                Cập nhật ngay (Tải về)
-              </a>
+                <CheckCircle2 className="w-4 h-4" />
+                Đã hiểu (Tự động cập nhật)
+              </button>
 
-              {updateInfo.download_url && (
+              {updateInfo.exe_download_url && (
                 <a
-                  href={updateInfo.download_url}
+                  href={updateInfo.exe_download_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white transition-colors flex items-center justify-center gap-1.5"
-                  title="Xem trên GitHub"
+                  title="Tải thủ công"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  GitHub
+                  <Download className="w-3.5 h-3.5" />
+                  Tải EXE
                 </a>
               )}
             </div>

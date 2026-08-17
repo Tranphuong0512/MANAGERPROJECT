@@ -47,6 +47,7 @@ export default function DashboardPage() {
   const [tasks, setTasks] = useState<any[]>([])
   const [departments, setDepartments] = useState<any[]>([])
   const [overviewTasks, setOverviewTasks] = useState<any[]>([])
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   const [stats, setStats] = useState({
     totalProjects: 0,
@@ -64,6 +65,13 @@ export default function DashboardPage() {
     todoTasks: 0,
     avgProgress: 0,
   })
+
+  // Lắng nghe sự kiện refresh từ các component con
+  useEffect(() => {
+    const handleRefreshEvent = () => setRefreshTrigger(prev => prev + 1);
+    window.addEventListener('refresh-dashboard', handleRefreshEvent);
+    return () => window.removeEventListener('refresh-dashboard', handleRefreshEvent);
+  }, []);
 
   useEffect(() => {
     if (isLoadingOrg) return;
@@ -84,13 +92,17 @@ export default function DashboardPage() {
 
         const orgIds = [activeOrganization.id]
 
-        // Khởi tạo các promise song song cho dữ liệu độc lập
+        // 1. Khởi tạo các promise song song cho dữ liệu độc lập
         const projectsPromise = supabase
           .from('projects')
-          .select('*')
+          .select('*, departments(id, name)')
           .in('organization_id', orgIds)
           .is('deleted_at', null)
           .order('updated_at', { ascending: false });
+
+        const apecProjectsPromise = fetch('/api/v1/apec-global/projects')
+          .then(r => r.json())
+          .catch(() => ({ success: false, items: [] }));
 
         const incidentsPromise = supabase
           .from('incidents')
@@ -117,6 +129,10 @@ export default function DashboardPage() {
           .is('deleted_at', null)
           .order('name');
 
+        const apecDepartmentsPromise = fetch('/api/v1/apec-global/departments')
+          .then(r => r.json())
+          .catch(() => ({ success: false, items: [] }));
+
         const staffPromise = supabase
           .from('staff')
           .select(`
@@ -126,41 +142,145 @@ export default function DashboardPage() {
           .in('organization_id', orgIds)
           .is('deleted_at', null);
 
+        const profilesPromise = supabase
+          .from('organization_members')
+          .select('user_id, profiles(id, full_name, avatar_url)')
+          .in('organization_id', orgIds)
+          .is('deleted_at', null);
+
         const liveEmpPromise = fetch('/api/v1/apec-global/employees')
           .then(r => r.json())
           .catch(() => ({ success: false, items: [] }));
 
-        const apecTasksPromise = fetch('/api/v1/apec-global/tasks')
+        const apecTasksPromise = fetch('/api/v1/apec-global/tasks?limit=2000')
           .then(r => r.json())
           .catch(() => ({ success: false, items: [] }));
 
-        // Đợi tất cả fetch độc lập hoàn thành
+        // Đợi tất cả fetch độc lập ban đầu hoàn thành
         const [
           projectsRes,
+          apecProjectsRes,
           incidentsRes,
           staffCountRes,
           improvementsCountRes,
           departmentsRes,
+          apecDepartmentsRes,
           staffRes,
+          profilesRes,
           liveEmpRes,
           apecTasksRes
         ] = await Promise.all([
           projectsPromise,
+          apecProjectsPromise,
           incidentsPromise,
           staffCountPromise,
           improvementsCountPromise,
           departmentsPromise,
+          apecDepartmentsPromise,
           staffPromise,
+          profilesPromise,
           liveEmpPromise,
           apecTasksPromise
         ]);
 
-        let projectsData = projectsRes.data || [];
+        let rawSupabaseProjects = projectsRes.data || [];
         const incidentsData = incidentsRes.data || [];
         const totalImprovements = improvementsCountRes.count || 0;
-        const departmentsData = departmentsRes.data || [];
+        let departmentsData = [...(departmentsRes.data || [])];
 
-        // Tính toán chính xác tổng số lượng nhân sự thực tế (APEC Global Live Employees + Supabase Staff + Tài khoản thành viên)
+        // Gộp phòng ban từ APEC Global nếu chưa có
+        if (apecDepartmentsRes.success && Array.isArray(apecDepartmentsRes.items)) {
+          const existingDeptNames = new Set(departmentsData.map(d => (d.name || '').trim().toLowerCase()));
+          apecDepartmentsRes.items.forEach((apecDept: any) => {
+            const dName = apecDept.name || apecDept.department_name;
+            if (dName && !existingDeptNames.has(dName.trim().toLowerCase())) {
+              existingDeptNames.add(dName.trim().toLowerCase());
+              departmentsData.push({
+                id: apecDept.id || `apec_dept_${apecDept.id}`,
+                name: dName.trim(),
+                description: apecDept.description || null,
+                _from_apec: true,
+              });
+            }
+          });
+        }
+
+        // Gộp dự án từ APEC Global vào danh sách dự án
+        let projectsData = [...rawSupabaseProjects];
+        if (apecProjectsRes.success && Array.isArray(apecProjectsRes.items)) {
+          apecProjectsRes.items.forEach((apecPrj: any) => {
+            const code = apecPrj.code || `P-${apecPrj.id}`;
+            const existingIdx = projectsData.findIndex((p: any) =>
+              (p.code && p.code.toLowerCase() === code.toLowerCase()) ||
+              String(p.id) === String(apecPrj.id) ||
+              (p.name && p.name.trim().toLowerCase() === (apecPrj.name || '').trim().toLowerCase())
+            );
+            if (existingIdx >= 0) {
+              projectsData[existingIdx] = {
+                ...projectsData[existingIdx],
+                name: apecPrj.name || apecPrj.project_name || projectsData[existingIdx].name,
+                code,
+                department_name: apecPrj.department_name || apecPrj.department?.name || projectsData[existingIdx].department_name,
+                department_id: apecPrj.department_id || apecPrj.department?.id || projectsData[existingIdx].department_id,
+              };
+            } else {
+              projectsData.push({
+                id: String(apecPrj.id),
+                name: apecPrj.name || apecPrj.project_name || `Dự án APEC #${apecPrj.id}`,
+                code,
+                description: apecPrj.description || '',
+                status: apecPrj.status || 'active',
+                start_date: apecPrj.start_date || null,
+                end_date: apecPrj.end_date || null,
+                department_name: apecPrj.department_name || apecPrj.department?.name || null,
+                department_id: apecPrj.department_id || apecPrj.department?.id || null,
+                progress_percentage: apecPrj.process || apecPrj.progress || 0,
+                _from_apec: true,
+              });
+            }
+          });
+        }
+
+        // Bản đồ dự án để tra cứu nhanh thông tin phòng ban & tên
+        const projectMap = new Map<string, any>();
+        projectsData.forEach(p => {
+          projectMap.set(String(p.id), p);
+          if (p.code) projectMap.set(p.code.toLowerCase(), p);
+          if (p.name) projectMap.set(p.name.trim().toLowerCase(), p);
+        });
+
+        // Bản đồ profiles người dùng
+        const profilesMap = new Map<string, { id: string; full_name: string; avatar_url?: string }>();
+        (profilesRes.data || []).forEach((m: any) => {
+          const prof = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+          if (prof && prof.id) {
+            profilesMap.set(String(prof.id), prof);
+            if (prof.full_name) profilesMap.set(prof.full_name.trim().toLowerCase(), prof);
+          }
+        });
+
+        // Bản đồ nhân sự staff
+        const staffMap = new Map<string, any>();
+        (staffRes.data || []).forEach((st: any) => {
+          if (st.id) staffMap.set(String(st.id), st);
+          if (st.full_name) staffMap.set(st.full_name.trim().toLowerCase(), st);
+        });
+
+        // Bản đồ nhân sự APEC
+        const apecEmpMap = new Map<string, any>();
+        if (liveEmpRes.success && Array.isArray(liveEmpRes.items)) {
+          liveEmpRes.items.forEach((e: any) => {
+            if (e.id) {
+              apecEmpMap.set(String(e.id), e);
+              apecEmpMap.set(`apec_${e.id}`, e);
+              apecEmpMap.set(`apec_emp_${e.id}`, e);
+            }
+            if (e.fullname) apecEmpMap.set(e.fullname.trim().toLowerCase(), e);
+            if (e.name) apecEmpMap.set(e.name.trim().toLowerCase(), e);
+          });
+        }
+
+        // Tính toán tổng số lượng nhân sự thực tế
         const uniqueStaffSet = new Set<string>();
         if (liveEmpRes.success && Array.isArray(liveEmpRes.items)) {
           liveEmpRes.items.forEach((e: any) => {
@@ -181,7 +301,7 @@ export default function DashboardPage() {
               staffCountRes.count || 0
             );
 
-        // Xây dựng bản đồ ánh xạ Nhân sự -> Đúng Phòng Ban (Staff Department Map)
+        // Bản đồ ánh xạ Nhân sự -> Đúng Phòng Ban (Staff Department Map)
         const employeeDeptMap = new Map<string, { deptName: string; deptId?: string }>();
 
         (staffRes.data || []).forEach((st: any) => {
@@ -205,6 +325,7 @@ export default function DashboardPage() {
               if (e.id) {
                 employeeDeptMap.set(String(e.id), { deptName: dName, deptId: String(dId || '') });
                 employeeDeptMap.set(`apec_${e.id}`, { deptName: dName, deptId: String(dId || '') });
+                employeeDeptMap.set(`apec_emp_${e.id}`, { deptName: dName, deptId: String(dId || '') });
               }
               if (e.fullname) employeeDeptMap.set(e.fullname.trim().toLowerCase(), { deptName: dName, deptId: String(dId || '') });
               if (e.name) employeeDeptMap.set(e.name.trim().toLowerCase(), { deptName: dName, deptId: String(dId || '') });
@@ -215,113 +336,455 @@ export default function DashboardPage() {
         setDepartments(departmentsData)
         setIncidents(incidentsData)
 
-        const projectIds = projectsData.map(p => p.id)
+        // 2. Truy vấn song song dữ liệu TASKS & CHECKLIST ITEMS từ Supabase
+        const supabaseProjectIds = rawSupabaseProjects.map(p => p.id).filter(Boolean);
 
-        let tasksData: any[] = []
-        let rawChecklistData: any[] = []
-        let activitiesData: any[] = []
+        let supabaseTasksPromise: any = null;
+        let supabaseChecklistPromise: any = null;
+        let activitiesPromise: any = null;
 
-        if (projectIds.length > 0) {
-          // Fetch Tasks và Activities song song vì phụ thuộc vào projectIds
-          const tasksPromise = supabase
+        if (supabaseProjectIds.length > 0) {
+          // A) Lấy toàn bộ TASKS trực tiếp từ bảng tasks
+          supabaseTasksPromise = supabase
+            .from('tasks')
+            .select(`
+              id, title, description, status, priority, progress_percentage, start_date, due_date, created_at, project_id, assigned_to,
+              projects(id, name, department_id, departments(id, name)),
+              assigned_user:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url)
+            `)
+            .in('project_id', supabaseProjectIds)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false });
+
+          // B) Lấy toàn bộ CHECKLIST ITEMS từ bảng checklist_items
+          supabaseChecklistPromise = supabase
             .from('checklist_items')
             .select(`
-              id, title, status, is_completed, end_date, start_date, due_date, priority, 
-              project_checklists!inner(project_id, projects(id, name, department_id, departments(id, name))),
+              id, title, description, status, is_completed, progress, end_date, start_date, due_date, priority, created_at,
+              checklist_id, assigned_staff_id, assignee_ids,
+              project_checklists(id, project_id, deleted_at, projects(id, name, department_id, departments(id, name))),
               assignee:staff(id, full_name, avatar_url, department_id, departments(id, name))
             `)
-            .in('project_checklists.project_id', projectIds)
             .is('deleted_at', null)
             .order('updated_at', { ascending: false });
 
-          const activitiesPromise = supabase
+          // C) Lấy hoạt động dự án
+          activitiesPromise = supabase
             .from('project_activities')
             .select('*, projects(name), user:profiles!project_activities_user_id_fkey(full_name, avatar_url)')
-            .in('project_id', projectIds)
+            .in('project_id', supabaseProjectIds)
             .order('created_at', { ascending: false })
             .limit(10);
+        } else {
+          // Nếu chưa có project supabase cụ thể, thử lấy chung nếu có
+          supabaseTasksPromise = supabase
+            .from('tasks')
+            .select(`
+              id, title, description, status, priority, progress_percentage, start_date, due_date, created_at, project_id, assigned_to,
+              projects(id, name, department_id, departments(id, name))
+            `)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+            .limit(200);
 
-          const [tasksResult, activitiesResult] = await Promise.all([tasksPromise, activitiesPromise]);
-
-          if (tasksResult.data) {
-            rawChecklistData = tasksResult.data
-            tasksData = tasksResult.data.map((t: any) => ({
-              id: t.id,
-              title: t.title,
-              status: t.status || (t.is_completed ? 'done' : 'todo'),
-              priority: t.priority || 'medium',
-              due_date: t.end_date || t.due_date,
-              project_id: t.project_checklists?.project_id,
-              projects: { name: t.project_checklists?.projects?.name },
-              assignee: t.assignee
-            }))
-          }
-
-          if (activitiesResult.data) {
-            activitiesData = activitiesResult.data
-          }
+          supabaseChecklistPromise = supabase
+            .from('checklist_items')
+            .select(`
+              id, title, description, status, is_completed, progress, end_date, start_date, due_date, priority, created_at,
+              checklist_id, assigned_staff_id, assignee_ids,
+              project_checklists(id, project_id, deleted_at, projects(id, name, department_id, departments(id, name))),
+              assignee:staff(id, full_name, avatar_url, department_id, departments(id, name))
+            `)
+            .is('deleted_at', null)
+            .order('updated_at', { ascending: false })
+            .limit(200);
         }
 
-        if (tasksData.length > 0 || projectIds.length > 0) {
-          projectsData = projectsData.map(p => {
-            const pTasks = tasksData.filter(t => String(t.project_id) === String(p.id))
-            const totalTasks = pTasks.length
-            const doneTasks = pTasks.filter(t => t.status === 'done').length
-            const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
+        const [tasksRes, checklistRes, activitiesResult] = await Promise.all([
+          supabaseTasksPromise,
+          supabaseChecklistPromise,
+          activitiesPromise || Promise.resolve({ data: [] })
+        ]);
+
+        const rawTasksList = tasksRes?.data || [];
+        const rawChecklistList = checklistRes?.data || [];
+        const activitiesData = activitiesResult?.data || [];
+
+        // 3. Chuẩn hóa & Xử lý tasks từ bảng `tasks` của Supabase
+        const overviewFromTasksTable: any[] = rawTasksList.map((t: any) => {
+          const prj = t.projects || projectMap.get(String(t.project_id));
+          const strStatus = String(t.status || '').toLowerCase().trim();
+          
+          // Đã hoàn thành / Đã duyệt
+          const isDone = t.status === 'done' || t.status === 'completed' || t.status === 'resolved' || Boolean(t.is_completed) || strStatus.includes('hoàn thành') || strStatus.includes('đã duyệt') || strStatus.includes('da duyet') || strStatus.includes('đã phê duyệt');
+          
+          // Chờ duyệt: Khi không ở trạng thái Hoàn thành VÀ (status là review / in_review / chờ duyệt HOẶC tiến độ 100%)
+          const isReview = !isDone && (t.status === 'review' || t.status === 'in_review' || t.status === 'pending_approval' || strStatus.includes('chờ') || strStatus.includes('đợi') || strStatus.includes('pending') || Number(t.progress_percentage) >= 100);
+          
+          const progressVal = Number(t.progress_percentage ?? (isDone ? 100 : isReview ? 100 : (t.status === 'in_progress' ? 50 : 0)));
+
+          // Phân giải người thực hiện
+          let assigneeObj: { id?: any; full_name?: string; avatar_url?: string } | undefined = undefined;
+          if (t.assigned_user) {
+            assigneeObj = {
+              id: t.assigned_user.id,
+              full_name: t.assigned_user.full_name,
+              avatar_url: t.assigned_user.avatar_url,
+            };
+          } else if (t.assigned_to) {
+            const strAssignedTo = String(t.assigned_to);
+            const prof = profilesMap.get(strAssignedTo);
+            const st = staffMap.get(strAssignedTo);
+            const apecEmp = apecEmpMap.get(strAssignedTo);
+            if (prof) {
+              assigneeObj = { id: prof.id, full_name: prof.full_name, avatar_url: prof.avatar_url };
+            } else if (st) {
+              assigneeObj = { id: st.id, full_name: st.full_name, avatar_url: st.avatar_url };
+            } else if (apecEmp) {
+              assigneeObj = { id: apecEmp.id, full_name: apecEmp.fullname || apecEmp.name, avatar_url: apecEmp.avatar };
+            }
+          }
+
+          // Phân giải phòng ban
+          let deptName = '';
+          let deptId: any = undefined;
+
+          if (assigneeObj?.id) {
+            const found = employeeDeptMap.get(String(assigneeObj.id));
+            if (found) {
+              deptName = found.deptName;
+              deptId = found.deptId;
+            }
+          }
+          if (!deptName && assigneeObj?.full_name) {
+            const found = employeeDeptMap.get(assigneeObj.full_name.trim().toLowerCase());
+            if (found) {
+              deptName = found.deptName;
+              deptId = found.deptId;
+            }
+          }
+
+          if (!deptName) {
+            deptName = prj?.departments?.name || prj?.department_name;
+            deptId = prj?.department_id || prj?.departments?.id;
+          }
+
+          if (!deptName) {
+            deptName = 'Chung / Chưa phân loại';
+          }
+
+          return {
+            id: t.id,
+            raw_id: t.id,
+            title: t.title,
+            project_id: prj?.id || t.project_id,
+            project_name: prj?.name || 'Dự án nội bộ',
+            department_id: deptId,
+            department_name: deptName,
+            assignee: assigneeObj,
+            start_date: t.start_date || t.created_at || null,
+            due_date: t.due_date || null,
+            progress: progressVal,
+            status: (isDone ? 'done' : (isReview ? 'review' : (t.status === 'in_progress' ? 'in_progress' : (t.status === 'blocked' ? 'blocked' : 'todo')))) as any,
+            priority: (t.priority || 'medium') as any,
+            source: 'supabase' as const,
+            _table: 'tasks' as const,
+          };
+        });
+
+        // 4. Chuẩn hóa & Xử lý tasks từ bảng `checklist_items` của Supabase
+        const overviewFromChecklistTable: any[] = rawChecklistList
+          .filter((t: any) => !t.project_checklists?.deleted_at)
+          .map((t: any) => {
+            const prj = t.project_checklists?.projects || projectMap.get(String(t.project_checklists?.project_id || (t as any).project_id));
+            const rawSt = typeof t.status === 'object' ? t.status?.name || t.status?.id : t.status;
+            const taskSt = t.task_status?.id || t.task_status;
+            const strStatus = String(rawSt || '').toLowerCase().trim();
+            
+            // Đã hoàn thành / Đã duyệt
+            const isDone = Boolean(t.is_completed) || rawSt === 'done' || rawSt === 'completed' || rawSt === 'resolved' || rawSt === 4 || taskSt === 4 || strStatus.includes('hoàn thành') || strStatus.includes('đã duyệt') || strStatus.includes('da duyet') || strStatus.includes('đã phê duyệt');
+            
+            // Chờ duyệt: Khi không ở trạng thái Hoàn thành VÀ (status là review / in_review / chờ duyệt / statusId === 3 HOẶC tiến độ 100%)
+            const isReview = !isDone && (rawSt === 'review' || rawSt === 'in_review' || rawSt === 'pending_approval' || rawSt === 3 || taskSt === 3 || strStatus.includes('chờ') || strStatus.includes('đợi') || strStatus.includes('pending') || Number(t.progress) >= 100);
+            
+            const progressVal = Number(t.progress ?? (isDone ? 100 : isReview ? 100 : (rawSt === 'in_progress' ? 50 : 0)));
+
+            // Phân giải người thực hiện từ assignee / assigned_staff_id / assignee_ids
+            let assigneeObj: { id?: any; full_name?: string; avatar_url?: string } | undefined = undefined;
+
+            if (t.assignee) {
+              assigneeObj = {
+                id: t.assignee.id,
+                full_name: t.assignee.full_name,
+                avatar_url: t.assignee.avatar_url,
+              };
+            } else if (t.assigned_staff_id) {
+              const strStaffId = String(t.assigned_staff_id);
+              const st = staffMap.get(strStaffId);
+              const prof = profilesMap.get(strStaffId);
+              const apecEmp = apecEmpMap.get(strStaffId);
+              if (st) {
+                assigneeObj = { id: st.id, full_name: st.full_name, avatar_url: st.avatar_url };
+              } else if (prof) {
+                assigneeObj = { id: prof.id, full_name: prof.full_name, avatar_url: prof.avatar_url };
+              } else if (apecEmp) {
+                assigneeObj = { id: apecEmp.id, full_name: apecEmp.fullname || apecEmp.name, avatar_url: apecEmp.avatar };
+              }
+            } else if (Array.isArray(t.assignee_ids) && t.assignee_ids.length > 0) {
+              const firstId = String(t.assignee_ids[0]);
+              const st = staffMap.get(firstId);
+              const prof = profilesMap.get(firstId);
+              const apecEmp = apecEmpMap.get(firstId);
+              if (st) {
+                assigneeObj = { id: st.id, full_name: st.full_name, avatar_url: st.avatar_url };
+              } else if (prof) {
+                assigneeObj = { id: prof.id, full_name: prof.full_name, avatar_url: prof.avatar_url };
+              } else if (apecEmp) {
+                assigneeObj = { id: apecEmp.id, full_name: apecEmp.fullname || apecEmp.name, avatar_url: apecEmp.avatar };
+              }
+            }
+
+            // Phân giải phòng ban
+            let deptName = t.assignee?.departments?.name;
+            let deptId = t.assignee?.department_id;
+
+            if (!deptName && assigneeObj?.id) {
+              const found = employeeDeptMap.get(String(assigneeObj.id));
+              if (found) {
+                deptName = found.deptName;
+                deptId = found.deptId;
+              }
+            }
+            if (!deptName && assigneeObj?.full_name) {
+              const found = employeeDeptMap.get(assigneeObj.full_name.trim().toLowerCase());
+              if (found) {
+                deptName = found.deptName;
+                deptId = found.deptId;
+              }
+            }
+
+            if (!deptName) {
+              deptName = prj?.departments?.name || prj?.department_name;
+              deptId = prj?.department_id || prj?.departments?.id;
+            }
+
+            if (!deptName) {
+              deptName = 'Chung / Chưa phân loại';
+            }
+
             return {
-              ...p,
-              progress_percentage: p.progress_percentage > 0 ? p.progress_percentage : progress
+              id: t.id,
+              raw_id: t.id,
+              title: t.title,
+              project_id: prj?.id || t.project_checklists?.project_id || (t as any).project_id,
+              project_name: prj?.name || 'Dự án nội bộ',
+              department_id: deptId,
+              department_name: deptName,
+              assignee: assigneeObj,
+              start_date: t.start_date || t.created_at || null,
+              due_date: t.end_date || t.due_date || null,
+              progress: progressVal,
+              status: (isDone ? 'done' : (isReview ? 'review' : (rawSt === 'in_progress' ? 'in_progress' : 'todo'))) as any,
+              priority: (t.priority || 'medium') as any,
+              source: 'supabase' as const,
+              _table: 'checklist_items' as const,
+            };
+          });
+
+        // 5. Chuẩn hóa & Xử lý tasks từ APEC Global API
+        let apecTasksRawItems: any[] = [];
+        let overviewApecTasks: any[] = [];
+
+        if (apecTasksRes.success && Array.isArray(apecTasksRes.items)) {
+          apecTasksRawItems = apecTasksRes.items || [];
+          overviewApecTasks = apecTasksRawItems.map((t: any) => {
+            const ea = Array.isArray(t.employee_assignments) ? t.employee_assignments : [];
+            const isApprovedByBoss = ea.length > 0 && ea.every((assign: any) => assign.checked === true);
+
+            const parentProcess = Number(t.progress ?? t.process ?? 0);
+            let avgProgress = parentProcess;
+            if (ea.length > 0) {
+              const sum = ea.reduce((acc: number, cur: any) => acc + (Number(cur.process ?? cur.progress) || 0), 0);
+              avgProgress = Math.max(parentProcess, Math.round(sum / ea.length));
             }
-          })
+            if (Array.isArray(t.subtasks) && t.subtasks.length > 0) {
+              const subAvg = Math.round(t.subtasks.reduce((a: number, b: any) => a + (Number(b.process || b.progress) || 0), 0) / t.subtasks.length);
+              avgProgress = Math.max(avgProgress, subAvg);
+            }
+
+            const rawStatus = t.status || t.task_status;
+            const statusId = typeof rawStatus === 'object' ? Number(rawStatus?.id) : (typeof t.task_status === 'object' ? Number(t.task_status?.id) : Number(rawStatus));
+            const statusName = typeof rawStatus === 'object' ? String(rawStatus?.name || '').toLowerCase() : (typeof t.task_status === 'object' ? String(t.task_status?.name || '').toLowerCase() : String(rawStatus || '').toLowerCase());
+
+            // 1. Trạng thái Hoàn thành (Done / Đã duyệt)
+            const isApecDone = isApprovedByBoss || statusId === 4 || rawStatus === 'done' || rawStatus === 'completed' || rawStatus === 'resolved' || rawStatus === 'implemented' || statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || statusName.includes('da duyet') || statusName.includes('đã phê duyệt') || Boolean(t.is_completed);
+
+            // 2. Trạng thái Chờ duyệt (Review)
+            const isReview = !isApecDone && (statusId === 3 || rawStatus === 'review' || rawStatus === 'in_review' || rawStatus === 'pending_approval' || statusName.includes('chờ') || statusName.includes('đợi') || statusName.includes('pending') || parentProcess >= 100 || avgProgress >= 100);
+
+            let resolvedStatus: 'todo' | 'in_progress' | 'review' | 'done' = 'todo';
+            if (isApecDone) {
+              resolvedStatus = 'done';
+            } else if (isReview) {
+              resolvedStatus = 'review';
+            } else if (avgProgress > 0 || parentProcess > 0 || statusId === 2 || statusName.includes('đang')) {
+              resolvedStatus = 'in_progress';
+            } else {
+              resolvedStatus = 'todo';
+            }
+
+            // Trích xuất thông tin người thực hiện
+            let assigneeName = '';
+            let assigneeId: any = undefined;
+            let assigneeAvatar = undefined;
+            let deptName = '';
+            let deptId: any = undefined;
+
+            if (Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
+              const firstEa = t.employee_assignments[0];
+              const emp = firstEa.employee;
+              if (emp) {
+                assigneeName = emp.fullname || emp.name || '';
+                assigneeId = emp.id;
+                assigneeAvatar = emp.avatar;
+                deptName = emp.department_name || (typeof emp.department === 'object' ? emp.department?.name : (typeof emp.department === 'string' ? emp.department : ''));
+                deptId = emp.department_id || emp.department?.id;
+              }
+            }
+
+            if (!assigneeName && t.employee) {
+              assigneeName = t.employee.fullname || t.employee.name || '';
+              assigneeId = t.employee.id;
+              assigneeAvatar = t.employee.avatar;
+              deptName = t.employee.department_name || (typeof t.employee.department === 'object' ? t.employee.department?.name : (typeof t.employee.department === 'string' ? t.employee.department : ''));
+              deptId = t.employee.department_id || t.employee.department?.id;
+            }
+
+            // Tra cứu phòng ban chuẩn theo Nhân Sự từ employeeDeptMap
+            if (!deptName && assigneeId) {
+              const found = employeeDeptMap.get(String(assigneeId)) || employeeDeptMap.get(`apec_${assigneeId}`) || employeeDeptMap.get(`apec_emp_${assigneeId}`);
+              if (found) {
+                deptName = found.deptName;
+                deptId = found.deptId;
+              }
+            }
+            if (!deptName && assigneeName) {
+              const found = employeeDeptMap.get(assigneeName.trim().toLowerCase());
+              if (found) {
+                deptName = found.deptName;
+                deptId = found.deptId;
+              }
+            }
+
+            // Fallback: Tra cứu theo dự án hoặc phòng ban trên task
+            if (!deptName) {
+              deptName = typeof t.department === 'object' ? t.department?.name : (t.department_name || t.project?.department_name || null);
+              deptId = t.department_id || t.department?.id;
+            }
+
+            const pId = t.project_id || t.project?.id;
+            const prj = pId ? projectMap.get(String(pId)) : null;
+            if (!deptName && prj) {
+              deptName = prj.department_name || prj.departments?.name;
+              deptId = prj.department_id;
+            }
+
+            if (!deptName) {
+              deptName = 'Chung / Chưa phân loại';
+            }
+
+            // Trích xuất thời gian hạn chót đầy đủ
+            let startDate = t.start_date || t.created_at || null;
+            let dueDate = t.due_date || t.end_date || t.finish_date || t.target_date || t.completed_date || null;
+
+            if (!dueDate && Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
+              const firstEa = t.employee_assignments[0];
+              dueDate = firstEa.completed_date || firstEa.end_date || firstEa.due_date || null;
+              if (!startDate && firstEa.start_date) startDate = firstEa.start_date;
+            }
+
+            if (!dueDate && Array.isArray(t.subtasks) && t.subtasks.length > 0) {
+              const firstSub = t.subtasks[0];
+              dueDate = firstSub.due_date || firstSub.end_date || null;
+            }
+
+            return {
+              id: `apec_${t.id}`,
+              raw_id: t.id,
+              title: t.name || t.title || 'Nhiệm vụ',
+              project_id: pId,
+              project_name: prj?.name || t.project?.name || t.project_name || 'Dự án APEC',
+              department_id: deptId,
+              department_name: deptName,
+              assignee: assigneeName ? {
+                id: assigneeId,
+                full_name: assigneeName,
+                avatar_url: assigneeAvatar
+              } : undefined,
+              start_date: startDate,
+              due_date: dueDate,
+              progress: avgProgress,
+              status: resolvedStatus,
+              priority: (t.priority?.name?.toLowerCase()?.includes('cao') ? 'high' : 'medium') as any,
+              source: 'apec' as const,
+              employee_assignments: t.employee_assignments || []
+            };
+          });
         }
 
-        // Xử lý tasks từ APEC Global API & phát hiện Incidents từ APEC
-        let apecTasksData: any[] = []
-        let apecTasksRawItems: any[] = []
-        if (apecTasksRes.success && apecTasksRes.items) {
-          apecTasksRawItems = apecTasksRes.items || []
-          apecTasksData = apecTasksRawItems.map((t: any) => {
-            let progressVal = Number(t.progress || t.process) || 0
-            const rawStatus = t.status || t.task_status
-            let resolvedStatus = 'todo'
-            if (progressVal >= 100) {
-              resolvedStatus = 'done'
-            } else if (rawStatus && typeof rawStatus === 'object') {
-              const sId = Number(rawStatus.id)
-              if (sId === 4) resolvedStatus = 'done'
-              else if (sId === 3) resolvedStatus = 'review'
-              else if (sId === 2) resolvedStatus = 'in_progress'
-            } else if (typeof rawStatus === 'string') {
-              const s = rawStatus.toLowerCase()
-              if (s === 'done' || s === 'completed') resolvedStatus = 'done'
-              else if (s === 'review') resolvedStatus = 'review'
-              else if (s === 'in_progress') resolvedStatus = 'in_progress'
-            }
-            return { ...t, resolvedStatus }
-          })
-        }
+        // 6. HỢP NHẤT TOÀN BỘ CÔNG VIỆC TỪ MỌI NGUỒN & KHỬ TRÙNG LẶP
+        const seenTaskIds = new Set<string>();
+        const combinedOverviewTasks: any[] = [];
 
-        // Merge Incidents (Supabase + APEC tasks có type là SỰ CỐ & RỦI RO)
+        // Đưa tất cả tasks từ bảng tasks, checklist_items và apec vào
+        [...overviewFromTasksTable, ...overviewFromChecklistTable, ...overviewApecTasks].forEach(t => {
+          const key = `${t.source}_${t.raw_id || t.id}`;
+          if (!seenTaskIds.has(key)) {
+            seenTaskIds.add(key);
+            combinedOverviewTasks.push(t);
+          }
+        });
+
+        // 7. Cập nhật dữ liệu cho các component con
+        setOverviewTasks(combinedOverviewTasks);
+
+        // Chuẩn hóa tasksData cho MiniKanban và ScheduleWidget
+        const allTasksForWidgets = combinedOverviewTasks.map(t => ({
+          id: t.id,
+          title: t.title,
+          status: t.status,
+          priority: t.priority,
+          due_date: t.due_date,
+          project_id: t.project_id,
+          projects: { name: t.project_name },
+          assignee: t.assignee,
+        }));
+
+        setTasks(allTasksForWidgets);
+        setProjects(projectsData);
+        setActivities(activitiesData);
+
+        // 8. Merge Incidents (Supabase + APEC tasks có type là SỰ CỐ & RỦI RO)
         const apecIncidentTasks = (apecTasksRawItems || []).filter((t: any) => {
-          const typeName = String(t.type?.name || t.type_name || '').toUpperCase()
-          return typeName.includes('SỰ CỐ') || typeName.includes('RỦI RO')
-        })
+          const typeName = String(t.type?.name || t.type_name || '').toUpperCase();
+          return typeName.includes('SỰ CỐ') || typeName.includes('RỦI RO');
+        });
 
         const mapApecIncidentStatus = (t: any): string => {
-          const taskProc = Number(t.process ?? t.progress ?? 0)
-          const statusName = String(t.status?.name || t.status || '').toLowerCase()
-          const statusId = Number(t.status?.id || t.task_status?.id || t.status)
+          const taskProc = Number(t.process ?? t.progress ?? 0);
+          const statusName = String(t.status?.name || t.status || '').toLowerCase();
+          const statusId = Number(t.status?.id || t.task_status?.id || t.status);
           
-          if (t.is_completed || t.status === 'done' || taskProc >= 100 || statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || statusId === 4) return 'resolved'
-          if (t.status === 'review' || statusName.includes('chờ duyệt') || statusId === 3) return 'review'
-          if (t.status === 'in_progress' || statusName.includes('đang thực hiện') || statusId === 2) return 'investigating'
-          return 'new'
-        }
+          if (t.is_completed || t.status === 'done' || taskProc >= 100 || statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || statusId === 4) return 'resolved';
+          if (t.status === 'review' || statusName.includes('chờ duyệt') || statusId === 3) return 'review';
+          if (t.status === 'in_progress' || statusName.includes('đang thực hiện') || statusId === 2) return 'investigating';
+          return 'new';
+        };
 
         const existingIncidentIds = new Set([
           ...incidentsData.map((i: any) => String(i.id)),
           ...incidentsData.map((i: any) => String(i.checklist_item_id || '')).filter(Boolean)
-        ])
+        ]);
 
         const extraApecIncidents = apecIncidentTasks
           .filter((t: any) => !existingIncidentIds.has(String(t.id)))
@@ -331,239 +794,52 @@ export default function DashboardPage() {
             status: mapApecIncidentStatus(t),
             created_at: t.created_at || new Date().toISOString(),
             _from_apec: true,
-          }))
+          }));
 
         const combinedIncidents = [
           ...incidentsData.map((inc: any) => {
-            let currentStatus = inc.status
+            let currentStatus = inc.status;
             const apecTask = (apecTasksRawItems || []).find((t: any) => 
               String(t.id) === String(inc.checklist_item_id || inc.id) ||
               `apec_${t.id}` === String(inc.checklist_item_id) ||
               (t.name && inc.title && t.name.trim().toLowerCase() === inc.title.trim().toLowerCase())
-            )
+            );
             if (apecTask) {
-              currentStatus = mapApecIncidentStatus(apecTask)
+              currentStatus = mapApecIncidentStatus(apecTask);
             }
-            return { ...inc, status: currentStatus }
+            return { ...inc, status: currentStatus };
           }),
           ...extraApecIncidents
-        ]
+        ];
 
-        // ─── TẠO DANH SÁCH CÔNG VIỆC TỔNG HỢP VỚI ĐÚNG PHÒNG BAN THEO NHÂN SỰ ───
-        const overviewSupabaseTasks = (rawChecklistData || []).map((t: any) => {
-          const prj = t.project_checklists?.projects
-          const isDone = t.is_completed || t.status === 'done'
-          const isReview = t.status === 'review' || t.status === 'in_review'
-          const progressVal = isDone ? 100 : isReview ? 100 : (t.status === 'in_progress' ? 50 : 0)
+        setIncidents(combinedIncidents);
 
-          // 1. Ưu tiên xác định phòng ban THEO NHÂN SỰ ĐƯỢC PHÂN CÔNG (Assignee Department First)
-          let deptName = t.assignee?.departments?.name
-          let deptId = t.assignee?.department_id
-
-          if (!deptName && t.assignee?.id) {
-            const found = employeeDeptMap.get(String(t.assignee.id))
-            if (found) {
-              deptName = found.deptName
-              deptId = found.deptId
-            }
-          }
-          if (!deptName && t.assignee?.full_name) {
-            const found = employeeDeptMap.get(t.assignee.full_name.trim().toLowerCase())
-            if (found) {
-              deptName = found.deptName
-              deptId = found.deptId
-            }
-          }
-
-          // 2. Nếu công việc chưa có người làm -> lấy theo phòng ban của Dự án
-          if (!deptName) {
-            deptName = prj?.departments?.name || prj?.department_name
-            deptId = prj?.department_id || prj?.departments?.id
-          }
-
-          if (!deptName) {
-            deptName = 'Chung / Chưa phân loại'
-          }
-
-          // 3. Thời gian hạn chót đầy đủ
-          const startDate = t.start_date || null
-          const dueDate = t.end_date || t.due_date || null
-
-          return {
-            id: t.id,
-            raw_id: t.id,
-            title: t.title,
-            project_id: prj?.id || t.project_checklists?.project_id,
-            project_name: prj?.name || 'Dự án nội bộ',
-            department_id: deptId,
-            department_name: deptName,
-            assignee: t.assignee ? {
-              id: t.assignee.id,
-              full_name: t.assignee.full_name,
-              avatar_url: t.assignee.avatar_url
-            } : undefined,
-            start_date: startDate,
-            due_date: dueDate,
-            progress: progressVal,
-            status: (isDone ? 'done' : isReview ? 'review' : (t.status === 'in_progress' ? 'in_progress' : 'todo')) as any,
-            priority: (t.priority || 'medium') as any,
-            source: 'supabase' as const,
-          }
-        })
-
-        const overviewApecTasks = (apecTasksRawItems || []).map((t: any) => {
-          const progressVal = Number(t.progress ?? t.process ?? 0)
-          const rawStatus = t.status || t.task_status
-          let resolvedStatus: 'todo' | 'in_progress' | 'review' | 'done' = 'todo'
-          
-          if (progressVal >= 100 || t.is_completed) {
-            resolvedStatus = 'done'
-          } else if (rawStatus && typeof rawStatus === 'object') {
-            const sId = Number(rawStatus.id)
-            if (sId === 4) resolvedStatus = 'done'
-            else if (sId === 3) resolvedStatus = 'review'
-            else if (sId === 2) resolvedStatus = 'in_progress'
-          } else if (typeof rawStatus === 'string') {
-            const s = rawStatus.toLowerCase()
-            if (s === 'done' || s === 'completed' || s === 'approved') resolvedStatus = 'done'
-            else if (s === 'review' || s === 'pending') resolvedStatus = 'review'
-            else if (s === 'in_progress' || s === 'doing') resolvedStatus = 'in_progress'
-          }
-
-          // 1. Trích xuất thông tin người thực hiện
-          let assigneeName = ''
-          let assigneeId: any = undefined
-          let assigneeAvatar = undefined
-          let deptName = ''
-          let deptId: any = undefined
-
-          if (Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
-            const firstEa = t.employee_assignments[0]
-            const emp = firstEa.employee
-            if (emp) {
-              assigneeName = emp.fullname || emp.name || ''
-              assigneeId = emp.id
-              assigneeAvatar = emp.avatar
-              deptName = emp.department_name || (typeof emp.department === 'object' ? emp.department?.name : (typeof emp.department === 'string' ? emp.department : ''))
-              deptId = emp.department_id || emp.department?.id
-            }
-          }
-
-          if (!assigneeName && t.employee) {
-            assigneeName = t.employee.fullname || t.employee.name || ''
-            assigneeId = t.employee.id
-            assigneeAvatar = t.employee.avatar
-            deptName = t.employee.department_name || (typeof t.employee.department === 'object' ? t.employee.department?.name : (typeof t.employee.department === 'string' ? t.employee.department : ''))
-            deptId = t.employee.department_id || t.employee.department?.id
-          }
-
-          // 2. Tra cứu phòng ban chuẩn theo Nhân Sự từ employeeDeptMap
-          if (!deptName && assigneeId) {
-            const found = employeeDeptMap.get(String(assigneeId)) || employeeDeptMap.get(`apec_${assigneeId}`)
-            if (found) {
-              deptName = found.deptName
-              deptId = found.deptId
-            }
-          }
-          if (!deptName && assigneeName) {
-            const found = employeeDeptMap.get(assigneeName.trim().toLowerCase())
-            if (found) {
-              deptName = found.deptName
-              deptId = found.deptId
-            }
-          }
-
-          // 3. Fallback: Nếu không có người làm -> lấy phòng ban theo task hoặc dự án
-          if (!deptName) {
-            deptName = typeof t.department === 'object' ? t.department?.name : (t.department_name || t.project?.department_name || null)
-            deptId = t.department_id || t.department?.id
-          }
-
-          if (!deptName) {
-            deptName = 'Chung / Chưa phân loại'
-          }
-
-          // 4. Trích xuất thời gian hạn chót đầy đủ từ nhiều nguồn trường dữ liệu
-          let startDate = t.start_date || t.created_at || null
-          let dueDate = t.due_date || t.end_date || t.finish_date || t.target_date || t.completed_date || null
-
-          if (!dueDate && Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
-            const firstEa = t.employee_assignments[0]
-            dueDate = firstEa.completed_date || firstEa.end_date || firstEa.due_date || null
-            if (!startDate && firstEa.start_date) startDate = firstEa.start_date
-          }
-
-          if (!dueDate && Array.isArray(t.subtasks) && t.subtasks.length > 0) {
-            const firstSub = t.subtasks[0]
-            dueDate = firstSub.due_date || firstSub.end_date || null
-          }
-
-          return {
-            id: `apec_${t.id}`,
-            raw_id: t.id,
-            title: t.name || t.title || 'Nhiệm vụ',
-            project_id: t.project_id || t.project?.id,
-            project_name: t.project?.name || t.project_name || 'Dự án APEC',
-            department_id: deptId,
-            department_name: deptName,
-            assignee: assigneeName ? {
-              id: assigneeId,
-              full_name: assigneeName,
-              avatar_url: assigneeAvatar
-            } : undefined,
-            start_date: startDate,
-            due_date: dueDate,
-            progress: progressVal,
-            status: resolvedStatus,
-            priority: (t.priority?.name?.toLowerCase()?.includes('cao') ? 'high' : 'medium') as any,
-            source: 'apec' as const,
-            employee_assignments: t.employee_assignments || []
-          }
-        })
-
-        const combinedOverviewTasks = [...overviewSupabaseTasks, ...overviewApecTasks]
-        setOverviewTasks(combinedOverviewTasks)
-
-        setProjects(projectsData)
-        setTasks(tasksData)
-        setActivities(activitiesData)
-        setIncidents(combinedIncidents)
-
-        // Tính toán Stats Sự Cố
-        const totalInc = combinedIncidents.length
+        // 9. Tính toán Stats Toàn Diện
+        const totalInc = combinedIncidents.length;
         const unresolvedInc = combinedIncidents.filter((inc: any) =>
           inc.status !== 'resolved' && inc.status !== 'closed' && inc.status !== 'fixed'
-        ).length
+        ).length;
 
-        // Gộp tasks Supabase + APEC (tránh duplicate)
-        const supabaseTaskStatuses = tasksData.map((t: any) => t.status)
-        const apecDone = apecTasksData.filter(t => t.resolvedStatus === 'done').length
-        const apecInProgress = apecTasksData.filter(t => t.resolvedStatus === 'in_progress' || t.resolvedStatus === 'review').length
-        const apecTodo = apecTasksData.filter(t => t.resolvedStatus === 'todo').length
-        const supabaseDone = supabaseTaskStatuses.filter((s: string) => s === 'done').length
-        const supabaseInProgress = supabaseTaskStatuses.filter((s: string) => s === 'in_progress' || s === 'in_review').length
-        const supabaseTodo = supabaseTaskStatuses.filter((s: string) => s === 'todo').length
-
-        const combinedTotalTasks = tasksData.length + apecTasksData.length
-        const combinedCompletedTasks = supabaseDone + apecDone
-        const combinedInProgress = supabaseInProgress + apecInProgress
-        const combinedTodo = supabaseTodo + apecTodo
+        const totalTasksCount = combinedOverviewTasks.length;
+        const completedTasksCount = combinedOverviewTasks.filter(t => t.status === 'done' || t.progress >= 100).length;
+        const inProgressTasksCount = combinedOverviewTasks.filter(t => t.status === 'in_progress' || t.status === 'review').length;
+        const todoTasksCount = combinedOverviewTasks.filter(t => t.status === 'todo' || t.status === 'blocked').length;
 
         // Tính overdue projects
-        const now = new Date()
+        const now = new Date();
         const overdueProjects = projectsData.filter((p: any) => {
-          if (p.status === 'overdue') return true
+          if (p.status === 'overdue') return true;
           if (p.end_date && (p.status === 'active' || p.status === 'in_progress' || p.status === 'planning')) {
-            return new Date(p.end_date) < now
+            return new Date(p.end_date) < now;
           }
-          return false
-        }).length
+          return false;
+        }).length;
 
         // Tính tiến độ trung bình
-        const projectsWithProgress = projectsData.filter((p: any) => p.progress_percentage > 0)
+        const projectsWithProgress = projectsData.filter((p: any) => Number(p.progress_percentage) > 0);
         const avgProgress = projectsWithProgress.length > 0
-          ? Math.round(projectsWithProgress.reduce((sum: number, p: any) => sum + (p.progress_percentage || 0), 0) / projectsWithProgress.length)
-          : 0
+          ? Math.round(projectsWithProgress.reduce((sum: number, p: any) => sum + (Number(p.progress_percentage) || 0), 0) / projectsWithProgress.length)
+          : (totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : 0);
 
         setStats({
           totalProjects: projectsData.length,
@@ -575,12 +851,12 @@ export default function DashboardPage() {
           unresolvedIncidents: unresolvedInc,
           totalStaff,
           totalImprovements,
-          totalTasks: combinedTotalTasks,
-          completedTasks: combinedCompletedTasks,
-          inProgressTasks: combinedInProgress,
-          todoTasks: combinedTodo,
+          totalTasks: totalTasksCount,
+          completedTasks: completedTasksCount,
+          inProgressTasks: inProgressTasksCount,
+          todoTasks: todoTasksCount,
           avgProgress,
-        })
+        });
 
       } catch (err: any) {
         console.error('Error loading dashboard:', err)
@@ -591,7 +867,7 @@ export default function DashboardPage() {
     }
 
     loadData()
-  }, [router, activeOrganization, isLoadingOrg])
+  }, [router, activeOrganization, isLoadingOrg, refreshTrigger])
 
   if (isLoading) {
     return (
@@ -636,11 +912,7 @@ export default function DashboardPage() {
         departments={departments}
         onRefresh={() => {
           setIsLoading(true)
-          supabase.auth.getUser().then(() => {
-            // trigger re-fetch
-            const ev = new CustomEvent('refresh-dashboard')
-            window.dispatchEvent(ev)
-          })
+          setRefreshTrigger(prev => prev + 1)
         }}
         isLoading={isLoading}
       />

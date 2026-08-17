@@ -137,7 +137,7 @@ export function DepartmentTasksOverviewTable({
     let overdueCount = 0
 
     tasks.forEach(t => {
-      if (t.status === 'review' || (t.progress >= 100 && t.status !== 'done')) {
+      if (t.status === 'review') {
         reviewCount++
       } else if (t.status === 'done') {
         doneCount++
@@ -147,7 +147,7 @@ export function DepartmentTasksOverviewTable({
         todoCount++
       }
 
-      if (t.due_date && t.status !== 'done') {
+      if (t.due_date && t.status !== 'done' && t.status !== 'review') {
         if (new Date(t.due_date) < now) {
           overdueCount++
         }
@@ -170,39 +170,56 @@ export function DepartmentTasksOverviewTable({
     return tasks.filter(t => {
       // 1. Lọc theo Tab nhanh
       if (activeTab === 'review') {
-        const isReview = t.status === 'review' || (t.progress >= 100 && t.status !== 'done')
-        if (!isReview) return false
+        if (t.status !== 'review') return false
       } else if (activeTab === 'in_progress') {
         if (t.status !== 'in_progress') return false
       } else if (activeTab === 'done') {
         if (t.status !== 'done') return false
       } else if (activeTab === 'overdue') {
-        const isOverdue = t.due_date && t.status !== 'done' && new Date(t.due_date) < now
+        const isOverdue = t.due_date && t.status !== 'done' && t.status !== 'review' && new Date(t.due_date) < now
         if (!isOverdue) return false
       }
 
       // 2. Lọc theo Phòng Ban
       if (selectedDepartment !== 'all') {
-        const tDept = (t.department_name || '').toLowerCase().trim()
-        const selectedDeptObj = departmentOptions.find(d => String(d.id) === String(selectedDepartment) || d.name.toLowerCase() === selectedDepartment.toLowerCase())
-        const targetName = selectedDeptObj ? selectedDeptObj.name.toLowerCase() : selectedDepartment.toLowerCase()
-        if (tDept !== targetName && String(t.department_id) !== String(selectedDepartment)) {
+        const targetDeptKey = selectedDepartment.trim().toLowerCase()
+        const tDeptName = (t.department_name || 'Chung / Chưa phân loại').trim().toLowerCase()
+        const selectedDeptObj = departmentOptions.find(d => String(d.id) === String(selectedDepartment) || d.name.trim().toLowerCase() === targetDeptKey)
+        const targetName = selectedDeptObj ? selectedDeptObj.name.trim().toLowerCase() : targetDeptKey
+
+        const matchesName = tDeptName === targetName || tDeptName === targetDeptKey
+        const matchesId = t.department_id && String(t.department_id) === String(selectedDepartment)
+
+        if (!matchesName && !matchesId) {
           return false
         }
       }
 
       // 3. Lọc theo Dự án
       if (selectedProject !== 'all') {
-        if (String(t.project_id) !== String(selectedProject)) return false
+        const targetProjKey = selectedProject.trim().toLowerCase()
+        const tProjId = String(t.project_id || '').toLowerCase()
+        const tProjName = (t.project_name || '').trim().toLowerCase()
+        const selectedProjObj = projectOptions.find(p => String(p.id) === String(selectedProject) || p.name.trim().toLowerCase() === targetProjKey)
+        const targetName = selectedProjObj ? selectedProjObj.name.trim().toLowerCase() : targetProjKey
+
+        const matchesId = tProjId === targetProjKey || (selectedProjObj && tProjId === String(selectedProjObj.id).toLowerCase())
+        const matchesName = tProjName === targetName || tProjName === targetProjKey
+
+        if (!matchesId && !matchesName) {
+          return false
+        }
       }
 
       // 4. Lọc theo Trạng thái Dropdown
       if (selectedStatus !== 'all') {
         if (selectedStatus === 'review') {
-          if (t.status !== 'review' && !(t.progress >= 100 && t.status !== 'done')) return false
+          if (t.status !== 'review') return false
         } else if (selectedStatus === 'overdue') {
-          const isOverdue = t.due_date && t.status !== 'done' && new Date(t.due_date) < now
+          const isOverdue = t.due_date && t.status !== 'done' && t.status !== 'review' && new Date(t.due_date) < now
           if (!isOverdue) return false
+        } else if (selectedStatus === 'done') {
+          if (t.status !== 'done') return false
         } else {
           if (t.status !== selectedStatus) return false
         }
@@ -222,7 +239,7 @@ export function DepartmentTasksOverviewTable({
 
       return true
     })
-  }, [tasks, activeTab, selectedDepartment, selectedProject, selectedStatus, searchQuery, departmentOptions])
+  }, [tasks, activeTab, selectedDepartment, selectedProject, selectedStatus, searchQuery, departmentOptions, projectOptions])
 
   // Phân trang
   const paginatedTasks = useMemo(() => {
@@ -283,7 +300,7 @@ export function DepartmentTasksOverviewTable({
           })
         }).catch(err => console.warn('APEC task update fallback:', err))
       } else {
-        // Duyệt trên Supabase
+        // Duyệt trên Supabase: cập nhật cả checklist_items và tasks
         try {
           await supabase
             .from('checklist_items')
@@ -357,14 +374,27 @@ export function DepartmentTasksOverviewTable({
           })
         })
       } else {
-        await supabase
-          .from('checklist_items')
-          .update({
-            status: 'in_progress',
-            is_completed: false,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', task.id)
+        try {
+          await supabase
+            .from('checklist_items')
+            .update({
+              status: 'in_progress',
+              is_completed: false,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', task.id)
+        } catch {}
+
+        try {
+          await supabase
+            .from('tasks')
+            .update({
+              status: 'in_progress',
+              progress_percentage: 90,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', task.id)
+        } catch {}
       }
 
       showToast('info', `Đã chuyển công việc "${task.title}" về trạng thái Đang làm để nhân viên chỉnh sửa.`, 'Yêu cầu sửa lại')
@@ -430,22 +460,23 @@ export function DepartmentTasksOverviewTable({
   // Helper render badge trạng thái
   const renderStatusBadge = (status: string, progress: number, dueDate?: string | null) => {
     const now = new Date()
-    const isOverdue = dueDate && status !== 'done' && new Date(dueDate) < now
+    const isReview = status === 'review'
+    const isOverdue = dueDate && status !== 'done' && status !== 'review' && new Date(dueDate) < now
+
+    if (isReview) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 animate-pulse">
+          <Clock className="w-3.5 h-3.5 text-amber-600" />
+          ⏳ Chờ duyệt (100%)
+        </span>
+      )
+    }
 
     if (status === 'done') {
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
           Đã hoàn thành / Đã duyệt
-        </span>
-      )
-    }
-
-    if (status === 'review' || progress >= 100) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 animate-pulse">
-          <Clock className="w-3.5 h-3.5 text-amber-600" />
-          ⏳ Chờ duyệt (100%)
         </span>
       )
     }
@@ -802,7 +833,7 @@ export function DepartmentTasksOverviewTable({
               </tr>
             ) : (
               paginatedTasks.map((task, idx) => {
-                const isReview = task.status === 'review' || (task.progress >= 100 && task.status !== 'done')
+                const isReview = task.status === 'review'
                 const isProcessing = processingIds.has(task.id)
                 const isChecked = selectedTaskIds.has(task.id)
 

@@ -1823,13 +1823,15 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
                 items.forEach((i: any) => {
                   const st = typeof i.status === 'object' ? i.status?.name || i.status?.id : i.status;
                   const taskSt = i.task_status?.id || i.task_status;
-                  const isReview = st === 'review' || taskSt === 3 || st === 3 || String(st || '').toLowerCase().includes('chờ') || String(st || '').toLowerCase().includes('duyệt');
-                  const isDone = !isReview && (st === 'done' || st === 'completed' || taskSt === 4 || st === 4 || String(st || '').toLowerCase().includes('hoàn thành') || String(st || '').toLowerCase().includes('đã duyệt'));
+                  const stStr = String(st || '').toLowerCase().trim();
+                  
+                  const isDone = Boolean(i.is_completed) || st === 'done' || st === 'completed' || taskSt === 4 || st === 4 || stStr.includes('hoàn thành') || stStr.includes('đã duyệt') || stStr.includes('da duyet') || stStr.includes('đã phê duyệt');
+                  const isReview = !isDone && (st === 'review' || taskSt === 3 || st === 3 || stStr.includes('chờ') || stStr.includes('đợi') || stStr.includes('pending'));
 
-                  if (isReview) {
-                    reviewCount++;
-                  } else if (isDone) {
+                  if (isDone) {
                     completedCount++;
+                  } else if (isReview) {
+                    reviewCount++;
                   } else if (st === 'in_progress' || taskSt === 2) {
                     inProgressCount++;
                   } else {
@@ -2022,16 +2024,18 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
                   {/* Table Body (Sortable by Department) */}
                   {list.departments.map((dept: any) => {
                     const isDeptExpanded = expandedDepartments[`${list.id}_${dept.id}`] ?? false;
-                    const isTaskReview = (i: any) => {
-                      const st = typeof i.status === 'object' ? i.status?.name || i.status?.id : i.status;
-                      const taskSt = i.task_status?.id || i.task_status;
-                      return st === 'review' || taskSt === 3 || st === 3 || String(st || '').toLowerCase().includes('chờ') || String(st || '').toLowerCase().includes('duyệt');
-                    };
                     const isTaskDone = (i: any) => {
-                      if (isTaskReview(i)) return false; // NẾU ĐANG CHỜ DUYỆT THÌ KHÔNG ĐƯỢC COI LÀ HOÀN THÀNH!
                       const st = typeof i.status === 'object' ? i.status?.name || i.status?.id : i.status;
                       const taskSt = i.task_status?.id || i.task_status;
-                      return st === 'done' || st === 'completed' || taskSt === 4 || st === 4 || String(st || '').toLowerCase().includes('hoàn thành') || String(st || '').toLowerCase().includes('đã duyệt');
+                      const stStr = String(st || '').toLowerCase().trim();
+                      return Boolean(i.is_completed) || st === 'done' || st === 'completed' || taskSt === 4 || st === 4 || stStr.includes('hoàn thành') || stStr.includes('đã duyệt') || stStr.includes('da duyet') || stStr.includes('đã phê duyệt');
+                    };
+                    const isTaskReview = (i: any) => {
+                      if (isTaskDone(i)) return false;
+                      const st = typeof i.status === 'object' ? i.status?.name || i.status?.id : i.status;
+                      const taskSt = i.task_status?.id || i.task_status;
+                      const stStr = String(st || '').toLowerCase().trim();
+                      return st === 'review' || taskSt === 3 || st === 3 || stStr.includes('chờ') || stStr.includes('đợi') || stStr.includes('pending');
                     };
 
                     const totalCount = dept.items.length;

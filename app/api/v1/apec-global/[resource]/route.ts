@@ -68,8 +68,12 @@ export async function GET(
 
                 const taskStatus = t.task_status?.id || (typeof t.status === 'object' && t.status ? t.status?.id : t.status);
                 const statusName = typeof t.status === 'object' ? t.status?.name || '' : String(t.status || '');
-                const isReview = taskStatus === 3 || t.status === 'review' || statusName.toLowerCase().includes('chờ') || statusName.toLowerCase().includes('duyệt');
-                const isDone = !isReview && (taskStatus === 4 || t.status === 'done' || t.status === 'completed' || statusName.toLowerCase().includes('đã duyệt') || statusName.toLowerCase().includes('hoàn thành'));
+                const statusLower = statusName.toLowerCase();
+                const ea = Array.isArray(t.employee_assignments) ? t.employee_assignments : [];
+                const isApprovedByBoss = ea.length > 0 && ea.every((assign: any) => assign.checked === true);
+
+                const isDone = isApprovedByBoss || taskStatus === 4 || t.status === 'done' || t.status === 'completed' || t.status === 'resolved' || statusLower.includes('đã duyệt') || statusLower.includes('hoàn thành') || Boolean(t.is_completed);
+                const isReview = !isDone && (taskStatus === 3 || t.status === 'review' || statusLower.includes('chờ') || statusLower.includes('đợi') || statusLower.includes('pending') || Number(t.process ?? t.progress ?? 0) >= 100);
 
                 if (isDone) {
                   st.done += 1;

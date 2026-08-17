@@ -1,6 +1,6 @@
 {
   "name": "my-project",
-  "version": "3.6.1",
+  "version": "3.6.2",
   "private": true,
   "repository": {
     "type": "git",
@@ -54,12 +54,14 @@
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "@typescript-eslint/parser": "^8.67.0",
     "electron": "43.4.0",
     "electron-builder": "^26.15.3",
     "eslint": "^10.8.1",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
-    "typescript": "7.0.2"
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.67.0"
   },
   "overrides": {
     "hono": "4.12.25",
