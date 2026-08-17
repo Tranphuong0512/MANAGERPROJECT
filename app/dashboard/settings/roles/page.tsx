@@ -357,6 +357,7 @@ export default function RolesSettingsPage() {
   const isCustomRole = activeRoleObj?.organization_id !== null && activeRoleObj?.organization_id !== undefined
 
   const categoryTranslations: Record<string, string> = {
+    'overview': 'Tổng quan giám sát',
     'projects': 'Dự án',
     'project': 'Dự án',
     'tasks': 'Công việc',
@@ -371,6 +372,7 @@ export default function RolesSettingsPage() {
   }
   const actionTranslations: Record<string, string> = {
     'view': 'Xem',
+    'approve': 'Phê duyệt & Trả lại',
     'create': 'Thêm mới',
     'edit': 'Chỉnh sửa',
     'delete': 'Xóa',

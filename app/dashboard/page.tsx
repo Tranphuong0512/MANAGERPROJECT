@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { useOrganization } from '@/components/providers/organization-provider'
+import { usePermissions } from '@/hooks/usePermissions'
+import { Shield } from 'lucide-react'
 
 // Dynamic imports for heavy components - reduces initial bundle size
 const MonitorStatsRow = dynamic(() => import('@/components/dashboard/MonitorStatsRow').then(mod => mod.MonitorStatsRow), {
@@ -39,6 +41,7 @@ const DepartmentTasksOverviewTable = dynamic(() => import('@/components/dashboar
 export default function DashboardPage() {
   const router = useRouter()
   const { activeOrganization, isLoading: isLoadingOrg } = useOrganization()
+  const { hasPermission, isOwner, isLoading: isLoadingPerms } = usePermissions()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [projects, setProjects] = useState<any[]>([])
@@ -891,13 +894,33 @@ export default function DashboardPage() {
     loadData()
   }, [router, activeOrganization, isLoadingOrg, refreshTrigger])
 
-  if (isLoading) {
+  if (isLoading || isLoadingPerms) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="flex items-center gap-3">
           <div className="w-6 h-6 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
           <div className="text-lg font-medium text-slate-600">Đang tải dữ liệu thực...</div>
         </div>
+      </div>
+    )
+  }
+
+  if (!hasPermission('view_overview')) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-2xl p-8 max-w-xl mx-auto mt-16 text-center shadow-sm">
+        <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4 border border-amber-200">
+          <Shield className="w-6 h-6" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900 mb-2">Quyền truy cập bị hạn chế</h2>
+        <p className="text-slate-600 text-sm mb-6">
+          Tài khoản của bạn chưa được cấp quyền xem Phân hệ Tổng quan (<code className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded text-xs">view_overview</code>). Vui lòng liên hệ Quản trị viên để được cấp quyền truy cập.
+        </p>
+        <button
+          onClick={() => router.push('/dashboard/projects')}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-md shadow-blue-500/20 transition-all"
+        >
+          Chuyển tới Danh sách Dự án
+        </button>
       </div>
     )
   }

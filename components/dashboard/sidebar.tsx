@@ -20,7 +20,7 @@ interface SidebarProps {
 type NavItem = { name: string; href: string; icon: any; permission?: Permission | 'owner_only' }
 
 const navItems: NavItem[] = [
-  { name: 'Tổng quan', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Tổng quan', href: '/dashboard', icon: LayoutDashboard, permission: 'view_overview' },
   { name: 'Dự án', href: '/dashboard/projects', icon: FolderOpen, permission: 'view_projects' },
   { name: 'Sự cố & Cải tiến', href: '/dashboard/incidents', icon: AlertTriangle, permission: 'view_incidents' },
   { name: 'Nhân sự', href: '/dashboard/staff', icon: Users, permission: 'view_staff' },

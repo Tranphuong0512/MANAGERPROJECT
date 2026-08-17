@@ -27,6 +27,7 @@ import {
 import { showToast } from '@/utils/alert'
 import { formatVietnamDate } from '@/lib/utils'
 import { supabase } from '@/lib/supabase/client'
+import { usePermissions } from '@/hooks/usePermissions'
 
 export interface TaskOverviewItem {
   id: string | number
@@ -67,6 +68,9 @@ export function DepartmentTasksOverviewTable({
   onRefresh,
   isLoading = false,
 }: DepartmentTasksOverviewTableProps) {
+  const { hasPermission, isOwner, isManager, isTeamLead } = usePermissions()
+  const canApprove = isOwner || isManager || isTeamLead || hasPermission('approve_overview')
+
   const [tasks, setTasks] = useState<TaskOverviewItem[]>(initialTasks)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all')
@@ -724,7 +728,7 @@ export function DepartmentTasksOverviewTable({
 
         {/* Action buttons & refresh */}
         <div className="flex items-center gap-2.5 flex-wrap">
-          {selectedTaskIds.size > 0 && (
+          {canApprove && selectedTaskIds.size > 0 && (
             <button
               onClick={handleBulkApprove}
               disabled={isBulkApproving}
@@ -931,9 +935,9 @@ export function DepartmentTasksOverviewTable({
                   type="checkbox"
                   checked={allPageReviewsSelected}
                   onChange={toggleSelectAllPageReviews}
-                  disabled={reviewTasksOnPage.length === 0}
+                  disabled={!canApprove || reviewTasksOnPage.length === 0}
                   className="rounded text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-30"
-                  title="Chọn tất cả mục chờ duyệt trên trang"
+                  title={canApprove ? "Chọn tất cả mục chờ duyệt trên trang" : "Bạn không có quyền duyệt công việc"}
                 />
               </th>
               <th className="py-3 px-4 min-w-[220px]">Tên Công Việc</th>
@@ -976,8 +980,9 @@ export function DepartmentTasksOverviewTable({
                         type="checkbox"
                         checked={isChecked}
                         onChange={() => toggleSelectTask(task.id)}
-                        disabled={!isReview}
+                        disabled={!canApprove || !isReview}
                         className="rounded text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-20"
+                        title={!canApprove ? "Bạn không có quyền duyệt" : undefined}
                       />
                     </td>
 
@@ -1093,27 +1098,34 @@ export function DepartmentTasksOverviewTable({
                     {/* Thao tác Duyệt trực tiếp */}
                     <td className="py-3.5 px-4 text-right">
                       {isReview ? (
-                        <div className="inline-flex items-center gap-1.5 justify-end">
-                          <button
-                            onClick={() => handleApproveTask(task)}
-                            disabled={isProcessing}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm shadow-emerald-600/20 active:scale-95 transition-all disabled:opacity-50"
-                            title="Duyệt hoàn thành 100%"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            {isProcessing ? 'Đang duyệt...' : 'Duyệt'}
-                          </button>
+                        canApprove ? (
+                          <div className="inline-flex items-center gap-1.5 justify-end">
+                            <button
+                              onClick={() => handleApproveTask(task)}
+                              disabled={isProcessing}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm shadow-emerald-600/20 active:scale-95 transition-all disabled:opacity-50"
+                              title="Duyệt hoàn thành 100%"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              {isProcessing ? 'Đang duyệt...' : 'Duyệt'}
+                            </button>
 
-                          <button
-                            onClick={() => handleRejectTask(task)}
-                            disabled={isProcessing}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 active:scale-95 transition-all disabled:opacity-50"
-                            title="Yêu cầu nhân viên chỉnh sửa lại"
-                          >
-                            <RotateCcw className="w-3.5 h-3.5" />
-                            Sửa
-                          </button>
-                        </div>
+                            <button
+                              onClick={() => handleRejectTask(task)}
+                              disabled={isProcessing}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 active:scale-95 transition-all disabled:opacity-50"
+                              title="Yêu cầu nhân viên chỉnh sửa lại"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              Sửa
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 inline-flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-amber-600" />
+                            Chờ quản lý duyệt
+                          </span>
+                        )
                       ) : task.status === 'done' ? (
                         <span className="text-[11px] font-semibold text-emerald-600 inline-flex items-center gap-1">
                           <CheckCheck className="w-4 h-4 text-emerald-500" />

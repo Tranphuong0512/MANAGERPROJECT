@@ -4,8 +4,8 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useOrganization } from '@/components/providers/organization-provider'
 
-type PermissionModule = 'projects' | 'tasks' | 'incidents' | 'improvements' | 'staff' | 'organization' | 'reports' | 'settings'
-type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'import' | 'export' | 'download' | 'upload'
+type PermissionModule = 'projects' | 'tasks' | 'incidents' | 'improvements' | 'staff' | 'organization' | 'reports' | 'settings' | 'overview'
+type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'import' | 'export' | 'download' | 'upload' | 'approve' | 'manage'
 export type Permission = `${PermissionAction}_${PermissionModule}`
 
 export function usePermissions() {
@@ -49,7 +49,7 @@ export function usePermissions() {
             .eq('role_id', memberData.role_id)
 
           if (permData) {
-            const perms = permData.map((p: any) => p.permissions.name)
+            const perms = permData.map((p: any) => p.permissions?.name).filter(Boolean)
             setPermissions(perms)
           }
         }
@@ -71,6 +71,23 @@ export function usePermissions() {
   const hasPermission = useCallback((permission: Permission) => {
     // Super admin and Owner always have all permissions
     if (isSuperAdmin || role === 'owner') return true
+
+    // Fallback thông minh cho module Tổng quan (overview)
+    if (permission === 'view_overview') {
+      if (permissions.includes('view_overview')) return true
+      if (!permissions.length || role) return true // Mặc định các role đều được xem tổng quan
+    }
+
+    if (permission === 'approve_overview') {
+      if (permissions.includes('approve_overview')) return true
+      if (role === 'manager' || role === 'team_lead') return true // Quản lý & Trưởng nhóm được duyệt
+    }
+
+    if (permission === 'export_overview') {
+      if (permissions.includes('export_overview')) return true
+      if (role === 'manager' || role === 'team_lead') return true
+    }
+
     return permissions.includes(permission)
   }, [role, permissions, isSuperAdmin])
 
