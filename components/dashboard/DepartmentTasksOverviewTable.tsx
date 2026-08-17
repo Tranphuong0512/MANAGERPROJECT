@@ -19,7 +19,10 @@ import {
   ExternalLink,
   SlidersHorizontal,
   Sparkles,
-  ChevronLeft
+  ChevronLeft,
+  CheckSquare,
+  ListTodo,
+  Tag
 } from 'lucide-react'
 import { showToast } from '@/utils/alert'
 import { formatVietnamDate } from '@/lib/utils'
@@ -33,6 +36,7 @@ export interface TaskOverviewItem {
   project_name: string
   department_id?: string | number
   department_name: string
+  checklist_title?: string
   assignee?: {
     id?: string | number
     full_name?: string
@@ -68,6 +72,7 @@ export function DepartmentTasksOverviewTable({
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
   const [selectedProject, setSelectedProject] = useState<string>('all')
+  const [selectedChecklistType, setSelectedChecklistType] = useState<string>('all')
   const [activeTab, setActiveTab] = useState<'all' | 'review' | 'in_progress' | 'overdue' | 'done'>('all')
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string | number>>(new Set())
   const [processingIds, setProcessingIds] = useState<Set<string | number>>(new Set())
@@ -105,6 +110,14 @@ export function DepartmentTasksOverviewTable({
     return Boolean(matchesId || matchesName);
   };
 
+  // Helper: Kiểm tra khớp loại checklist
+  const isMatchChecklistType = (t: TaskOverviewItem, typeVal: string) => {
+    if (typeVal === 'all') return true;
+    const targetKey = typeVal.trim().toLowerCase();
+    const tType = (t.checklist_title || 'Nhiệm vụ chung').trim().toLowerCase();
+    return tType === targetKey;
+  };
+
   // Helper: Kiểm tra khớp từ khóa
   const isMatchSearchQuery = (t: TaskOverviewItem, query: string) => {
     if (!query.trim()) return true;
@@ -113,7 +126,8 @@ export function DepartmentTasksOverviewTable({
     const matchProject = t.project_name?.toLowerCase().includes(q);
     const matchDept = t.department_name?.toLowerCase().includes(q);
     const matchAssignee = t.assignee?.full_name?.toLowerCase().includes(q);
-    return Boolean(matchTitle || matchProject || matchDept || matchAssignee);
+    const matchChecklist = t.checklist_title?.toLowerCase().includes(q);
+    return Boolean(matchTitle || matchProject || matchDept || matchAssignee || matchChecklist);
   };
 
   // Helper: Kiểm tra khớp trạng thái dropdown
@@ -126,7 +140,33 @@ export function DepartmentTasksOverviewTable({
     return t.status === statusVal;
   };
 
-  // Trích xuất danh sách phòng ban động (phản ánh theo dự án & tìm kiếm đang chọn)
+  // Trích xuất danh sách loại checklist động (phản ánh theo phòng ban, dự án & tìm kiếm)
+  const checklistTypeOptions = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number }>()
+
+    tasks.forEach(t => {
+      if (
+        !isMatchDept(t, selectedDepartment) ||
+        !isMatchProj(t, selectedProject) ||
+        !isMatchSearchQuery(t, searchQuery) ||
+        !isMatchDropdownStatus(t, selectedStatus)
+      ) {
+        return;
+      }
+      const rawName = t.checklist_title ? t.checklist_title.trim() : 'Nhiệm vụ chung';
+      const key = rawName.toLowerCase();
+      const existing = map.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        map.set(key, { id: key, name: rawName, count: 1 });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [tasks, selectedDepartment, selectedProject, searchQuery, selectedStatus, departments, projects]);
+
+  // Trích xuất danh sách phòng ban động (phản ánh theo dự án, loại checklist & tìm kiếm đang chọn)
   const departmentOptions = useMemo(() => {
     const map = new Map<string, { id: string; name: string; count: number }>()
     departments.forEach(d => {
@@ -136,9 +176,14 @@ export function DepartmentTasksOverviewTable({
       }
     })
 
-    // Đếm số task theo từng phòng ban trong phạm vi bộ lọc Dự án & Tìm kiếm
+    // Đếm số task theo từng phòng ban trong phạm vi bộ lọc Dự án, Loại Checklist & Tìm kiếm
     tasks.forEach(t => {
-      if (!isMatchProj(t, selectedProject) || !isMatchSearchQuery(t, searchQuery) || !isMatchDropdownStatus(t, selectedStatus)) {
+      if (
+        !isMatchProj(t, selectedProject) ||
+        !isMatchChecklistType(t, selectedChecklistType) ||
+        !isMatchSearchQuery(t, searchQuery) ||
+        !isMatchDropdownStatus(t, selectedStatus)
+      ) {
         return
       }
       const deptName = t.department_name ? t.department_name.trim() : 'Chung / Chưa phân loại'
@@ -152,9 +197,9 @@ export function DepartmentTasksOverviewTable({
     })
 
     return Array.from(map.values()).sort((a, b) => b.count - a.count)
-  }, [departments, tasks, selectedProject, searchQuery, selectedStatus, projects])
+  }, [departments, tasks, selectedProject, selectedChecklistType, searchQuery, selectedStatus, projects])
 
-  // Trích xuất danh sách dự án động (phản ánh theo phòng ban & tìm kiếm đang chọn)
+  // Trích xuất danh sách dự án động (phản ánh theo phòng ban, loại checklist & tìm kiếm đang chọn)
   const projectOptions = useMemo(() => {
     const map = new Map<string, { id: string; name: string; count: number }>()
     projects.forEach(p => {
@@ -164,7 +209,12 @@ export function DepartmentTasksOverviewTable({
     })
 
     tasks.forEach(t => {
-      if (!isMatchDept(t, selectedDepartment) || !isMatchSearchQuery(t, searchQuery) || !isMatchDropdownStatus(t, selectedStatus)) {
+      if (
+        !isMatchDept(t, selectedDepartment) ||
+        !isMatchChecklistType(t, selectedChecklistType) ||
+        !isMatchSearchQuery(t, searchQuery) ||
+        !isMatchDropdownStatus(t, selectedStatus)
+      ) {
         return
       }
       const pId = String(t.project_id || '')
@@ -176,9 +226,9 @@ export function DepartmentTasksOverviewTable({
       }
     })
     return Array.from(map.values()).sort((a, b) => b.count - a.count)
-  }, [projects, tasks, selectedDepartment, searchQuery, selectedStatus, departments])
+  }, [projects, tasks, selectedDepartment, selectedChecklistType, searchQuery, selectedStatus, departments])
 
-  // Thống kê nhanh theo trạng thái TRONG PHẠM VI BỘ LỌC ĐANG CHỌN (Phòng ban, Dự án, Tìm kiếm)
+  // Thống kê nhanh theo trạng thái TRONG PHẠM VI BỘ LỌC ĐANG CHỌN (Phòng ban, Dự án, Loại Checklist, Tìm kiếm)
   const stats = useMemo(() => {
     const now = new Date()
     let reviewCount = 0
@@ -189,9 +239,10 @@ export function DepartmentTasksOverviewTable({
     let totalCount = 0
 
     tasks.forEach(t => {
-      // Áp dụng bộ lọc ngữ cảnh: Phòng ban, Dự án, Tìm kiếm, Dropdown trạng thái
+      // Áp dụng bộ lọc ngữ cảnh: Phòng ban, Dự án, Loại Checklist, Tìm kiếm, Dropdown trạng thái
       if (!isMatchDept(t, selectedDepartment)) return
       if (!isMatchProj(t, selectedProject)) return
+      if (!isMatchChecklistType(t, selectedChecklistType)) return
       if (!isMatchSearchQuery(t, searchQuery)) return
       if (!isMatchDropdownStatus(t, selectedStatus)) return
 
@@ -221,7 +272,7 @@ export function DepartmentTasksOverviewTable({
       todo: todoCount,
       overdue: overdueCount,
     }
-  }, [tasks, selectedDepartment, selectedProject, searchQuery, selectedStatus, departments, projects])
+  }, [tasks, selectedDepartment, selectedProject, selectedChecklistType, searchQuery, selectedStatus, departments, projects])
 
   // Lọc danh sách công việc
   const filteredTasks = useMemo(() => {
@@ -233,10 +284,13 @@ export function DepartmentTasksOverviewTable({
       // 2. Khớp dự án
       if (!isMatchProj(t, selectedProject)) return false
 
-      // 3. Khớp từ khóa tìm kiếm
+      // 3. Khớp loại checklist
+      if (!isMatchChecklistType(t, selectedChecklistType)) return false
+
+      // 4. Khớp từ khóa tìm kiếm
       if (!isMatchSearchQuery(t, searchQuery)) return false
 
-      // 4. Lọc theo Tab nhanh
+      // 5. Lọc theo Tab nhanh
       if (activeTab === 'review') {
         if (t.status !== 'review') return false
       } else if (activeTab === 'in_progress') {
@@ -248,7 +302,7 @@ export function DepartmentTasksOverviewTable({
         if (!isOverdue) return false
       }
 
-      // 5. Lọc theo Trạng thái Dropdown
+      // 6. Lọc theo Trạng thái Dropdown
       if (selectedStatus !== 'all') {
         if (selectedStatus === 'review') {
           if (t.status !== 'review') return false
@@ -264,7 +318,7 @@ export function DepartmentTasksOverviewTable({
 
       return true
     })
-  }, [tasks, activeTab, selectedDepartment, selectedProject, selectedStatus, searchQuery, departments, projects])
+  }, [tasks, activeTab, selectedDepartment, selectedProject, selectedChecklistType, selectedStatus, searchQuery, departments, projects])
 
   // Phân trang
   const paginatedTasks = useMemo(() => {
@@ -617,6 +671,31 @@ export function DepartmentTasksOverviewTable({
     return 'bg-slate-50 text-slate-700 border-slate-200'
   }
 
+  // Helper render màu và icon badge loại checklist
+  const getChecklistTypeBadgeStyle = (typeName?: string) => {
+    if (!typeName) return { bg: 'bg-slate-50 text-slate-700 border-slate-200', iconColor: 'text-slate-500' }
+    const upper = typeName.toUpperCase().trim()
+    if (upper.includes('CẢI TIẾN') || upper.includes('NÂNG CẤP') || upper.includes('IMPROVEMENT')) {
+      return { bg: 'bg-amber-50 text-amber-800 border-amber-200', iconColor: 'text-amber-600' }
+    }
+    if (upper.includes('SỰ CỐ') || upper.includes('RỦI RO') || upper.includes('INCIDENT') || upper.includes('RISK')) {
+      return { bg: 'bg-rose-50 text-rose-800 border-rose-200', iconColor: 'text-rose-600' }
+    }
+    if (upper.includes('NHẬT KÝ') || upper.includes('CHUYÊN MÔN') || upper.includes('LOG')) {
+      return { bg: 'bg-blue-50 text-blue-800 border-blue-200', iconColor: 'text-blue-600' }
+    }
+    if (upper.includes('HẰNG NGÀY') || upper.includes('DAILY') || upper.includes('THƯỜNG XUYÊN')) {
+      return { bg: 'bg-emerald-50 text-emerald-800 border-emerald-200', iconColor: 'text-emerald-600' }
+    }
+    if (upper.includes('MỤC TIÊU') || upper.includes('DỰ ÁN') || upper.includes('TARGET') || upper.includes('GOAL')) {
+      return { bg: 'bg-purple-50 text-purple-800 border-purple-200', iconColor: 'text-purple-600' }
+    }
+    if (upper.includes('KẾ HOẠCH') || upper.includes('GIAI ĐOẠN') || upper.includes('PHASE') || upper.includes('PLAN')) {
+      return { bg: 'bg-cyan-50 text-cyan-800 border-cyan-200', iconColor: 'text-cyan-600' }
+    }
+    return { bg: 'bg-indigo-50 text-indigo-700 border-indigo-200', iconColor: 'text-indigo-600' }
+  }
+
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 mb-8 transition-all">
       {/* ─── HEADER: TITLE & STATS COUNTER ─── */}
@@ -660,18 +739,17 @@ export function DepartmentTasksOverviewTable({
             <button
               onClick={onRefresh}
               disabled={isLoading}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
-              title="Làm mới danh sách"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all disabled:opacity-50"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-600' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               Làm mới
             </button>
           )}
         </div>
       </div>
 
-      {/* ─── FILTER TABS & SEARCH BAR ─── */}
-      <div className="flex flex-col gap-3.5 pt-4 pb-2">
+      {/* ─── FILTERS TOOLBAR ─── */}
+      <div className="space-y-4 pt-5">
         {/* Quick Filter Tabs */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
           <button
@@ -689,7 +767,7 @@ export function DepartmentTasksOverviewTable({
             onClick={() => { setActiveTab('review'); setCurrentPage(1) }}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
               activeTab === 'review'
-                ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20'
+                ? 'bg-amber-50 text-white shadow-md shadow-amber-500/20'
                 : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
             }`}
           >
@@ -735,7 +813,7 @@ export function DepartmentTasksOverviewTable({
         </div>
 
         {/* Detailed Dropdown Filters & Search */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
           {/* 1. Lọc theo Phòng Ban */}
           <div className="relative">
             <label className="block text-[11px] font-bold text-slate-500 mb-1">
@@ -780,7 +858,29 @@ export function DepartmentTasksOverviewTable({
             </div>
           </div>
 
-          {/* 3. Lọc theo Trạng thái */}
+          {/* 3. Lọc theo Loại Checklist */}
+          <div className="relative">
+            <label className="block text-[11px] font-bold text-slate-500 mb-1">
+              Loại Checklist ({checklistTypeOptions.length})
+            </label>
+            <div className="relative">
+              <CheckSquare className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <select
+                value={selectedChecklistType}
+                onChange={e => { setSelectedChecklistType(e.target.value); setCurrentPage(1) }}
+                className="w-full pl-9 pr-8 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
+              >
+                <option value="all">Tất cả Loại Checklist ({checklistTypeOptions.reduce((acc, c) => acc + c.count, 0)})</option>
+                {checklistTypeOptions.map(ct => (
+                  <option key={ct.id} value={ct.name}>
+                    {ct.name} ({ct.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* 4. Lọc theo Trạng thái */}
           <div className="relative">
             <label className="block text-[11px] font-bold text-slate-500 mb-1">
               Trạng thái chi tiết
@@ -802,7 +902,7 @@ export function DepartmentTasksOverviewTable({
             </div>
           </div>
 
-          {/* 4. Tìm kiếm từ khóa */}
+          {/* 5. Tìm kiếm từ khóa */}
           <div className="relative">
             <label className="block text-[11px] font-bold text-slate-500 mb-1">
               Tìm kiếm công việc / nhân sự
@@ -811,7 +911,7 @@ export function DepartmentTasksOverviewTable({
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Tên việc, nhân sự, dự án..."
+                placeholder="Tên việc, checklist, dự án..."
                 value={searchQuery}
                 onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1) }}
                 className="w-full pl-9 pr-3 py-2 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
@@ -836,23 +936,24 @@ export function DepartmentTasksOverviewTable({
                   title="Chọn tất cả mục chờ duyệt trên trang"
                 />
               </th>
-              <th className="py-3 px-4 min-w-[240px]">Tên Công Việc</th>
-              <th className="py-3 px-4 min-w-[170px]">Dự Án</th>
-              <th className="py-3 px-4 min-w-[150px]">Phòng Ban</th>
-              <th className="py-3 px-4 min-w-[150px]">Người Thực Hiện</th>
+              <th className="py-3 px-4 min-w-[220px]">Tên Công Việc</th>
+              <th className="py-3 px-4 min-w-[150px]">Dự Án</th>
+              <th className="py-3 px-4 min-w-[150px]">Loại Checklist</th>
+              <th className="py-3 px-4 min-w-[140px]">Phòng Ban</th>
+              <th className="py-3 px-4 min-w-[140px]">Người Thực Hiện</th>
               <th className="py-3 px-4 min-w-[130px]">Thời Gian / Hạn Chót</th>
-              <th className="py-3 px-4 min-w-[170px]">Tiến Độ & Trạng Thái</th>
-              <th className="py-3 px-4 min-w-[160px] text-right">Thao Tác Duyệt</th>
+              <th className="py-3 px-4 min-w-[160px]">Tiến Độ & Trạng Thái</th>
+              <th className="py-3 px-4 min-w-[150px] text-right">Thao Tác Duyệt</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {paginatedTasks.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-12 text-center text-slate-400">
+                <td colSpan={9} className="py-12 text-center text-slate-400">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Building2 className="w-8 h-8 text-slate-300" />
                     <p className="text-sm font-semibold text-slate-600">Không tìm thấy công việc nào phù hợp</p>
-                    <p className="text-xs text-slate-400">Thử thay đổi bộ lọc Phòng ban, Trạng thái hoặc từ khóa tìm kiếm</p>
+                    <p className="text-xs text-slate-400">Thử thay đổi bộ lọc Phòng ban, Loại checklist, Trạng thái hoặc từ khóa tìm kiếm</p>
                   </div>
                 </td>
               </tr>
@@ -913,6 +1014,25 @@ export function DepartmentTasksOverviewTable({
                         </Link>
                       ) : (
                         <span className="text-slate-500 font-medium">{task.project_name || 'Chung'}</span>
+                      )}
+                    </td>
+
+                    {/* Loại Checklist */}
+                    <td className="py-3.5 px-4">
+                      {task.checklist_title ? (
+                        (() => {
+                          const badgeStyle = getChecklistTypeBadgeStyle(task.checklist_title)
+                          return (
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${badgeStyle.bg} max-w-[170px] shadow-xs`}>
+                              <CheckSquare className={`w-3.5 h-3.5 flex-shrink-0 ${badgeStyle.iconColor}`} />
+                              <span className="truncate" title={task.checklist_title}>
+                                {task.checklist_title}
+                              </span>
+                            </span>
+                          )
+                        })()
+                      ) : (
+                        <span className="text-slate-400 text-xs italic">Nhiệm vụ chung</span>
                       )}
                     </td>
 

@@ -362,7 +362,7 @@ export default function DashboardPage() {
             .select(`
               id, title, description, status, is_completed, progress, end_date, start_date, due_date, priority, created_at,
               checklist_id, assigned_staff_id, assignee_ids,
-              project_checklists(id, project_id, deleted_at, projects(id, name, department_id, departments(id, name))),
+              project_checklists(id, title, name, project_id, deleted_at, projects(id, name, department_id, departments(id, name))),
               assignee:staff(id, full_name, avatar_url, department_id, departments(id, name))
             `)
             .is('deleted_at', null)
@@ -392,7 +392,7 @@ export default function DashboardPage() {
             .select(`
               id, title, description, status, is_completed, progress, end_date, start_date, due_date, priority, created_at,
               checklist_id, assigned_staff_id, assignee_ids,
-              project_checklists(id, project_id, deleted_at, projects(id, name, department_id, departments(id, name))),
+              project_checklists(id, title, name, project_id, deleted_at, projects(id, name, department_id, departments(id, name))),
               assignee:staff(id, full_name, avatar_url, department_id, departments(id, name))
             `)
             .is('deleted_at', null)
@@ -477,23 +477,24 @@ export default function DashboardPage() {
           const taskStartDate = t.start_date || t.date_start || t.created_at || null;
           const taskDueDate = t.due_date || t.end_date || t.date_end || t.finish_date || t.completed_date || t.target_date || null;
 
-          return {
-            id: t.id,
-            raw_id: t.id,
-            title: t.title,
-            project_id: prj?.id || t.project_id,
-            project_name: prj?.name || 'Dự án nội bộ',
-            department_id: deptId,
-            department_name: deptName,
-            assignee: assigneeObj,
-            start_date: taskStartDate,
-            due_date: taskDueDate,
-            progress: progressVal,
-            status: (isDone ? 'done' : (isReview ? 'review' : (t.status === 'in_progress' ? 'in_progress' : (t.status === 'blocked' ? 'blocked' : 'todo')))) as any,
-            priority: (t.priority || 'medium') as any,
-            source: 'supabase' as const,
-            _table: 'tasks' as const,
-          };
+            return {
+              id: t.id,
+              raw_id: t.id,
+              title: t.title,
+              project_id: prj?.id || t.project_id,
+              project_name: prj?.name || 'Dự án nội bộ',
+              department_id: deptId,
+              department_name: deptName,
+              checklist_title: (t as any).category || (t as any).type || (t as any).task_type || 'Nhiệm vụ chung',
+              assignee: assigneeObj,
+              start_date: taskStartDate,
+              due_date: taskDueDate,
+              progress: progressVal,
+              status: (isDone ? 'done' : (isReview ? 'review' : (t.status === 'in_progress' ? 'in_progress' : (t.status === 'blocked' ? 'blocked' : 'todo')))) as any,
+              priority: (t.priority || 'medium') as any,
+              source: 'supabase' as const,
+              _table: 'tasks' as const,
+            };
         });
 
         // 4. Chuẩn hóa & Xử lý tasks từ bảng `checklist_items` của Supabase
@@ -588,6 +589,7 @@ export default function DashboardPage() {
               project_name: prj?.name || 'Dự án nội bộ',
               department_id: deptId,
               department_name: deptName,
+              checklist_title: t.project_checklists?.title || t.project_checklists?.name || 'Checklist dự án',
               assignee: assigneeObj,
               start_date: ciStartDate,
               due_date: ciDueDate,
@@ -722,6 +724,11 @@ export default function DashboardPage() {
               }
             }
 
+            const apecChecklistType = (typeof t.type === 'object' ? t.type?.name : t.type_name) ||
+              t.type_task?.name ||
+              t.checklist_title ||
+              (t.is_incident ? 'SỰ CỐ & RỦI RO' : (t.is_improvement ? 'CẢI TIẾN & NÂNG CẤP' : 'NHẬT KÝ CHUYÊN MÔN'));
+
             return {
               id: `apec_${t.id}`,
               raw_id: t.id,
@@ -730,6 +737,7 @@ export default function DashboardPage() {
               project_name: prj?.name || t.project?.name || t.project_name || 'Dự án APEC',
               department_id: deptId,
               department_name: deptName,
+              checklist_title: apecChecklistType,
               assignee: assigneeName ? {
                 id: assigneeId,
                 full_name: assigneeName,
