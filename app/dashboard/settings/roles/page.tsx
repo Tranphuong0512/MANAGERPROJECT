@@ -57,6 +57,27 @@ export default function RolesSettingsPage() {
 
   const loadData = async () => {
     try {
+      // Ưu tiên fetch từ /api/v1/permissions để auto-sync và tải toàn bộ quyền hệ thống bao gồm Tổng quan giám sát
+      const apiRes = await fetch('/api/v1/permissions').catch(() => null)
+      if (apiRes && apiRes.ok) {
+        const apiData = await apiRes.json()
+        if (apiData.success && Array.isArray(apiData.permissions)) {
+          setPermissionsList(apiData.permissions)
+          if (Array.isArray(apiData.roles) && apiData.roles.length > 0) {
+            setRoles(apiData.roles)
+            if (!activeRoleTab) {
+              setActiveRoleTab(apiData.roles[0].id)
+            }
+          }
+          if (Array.isArray(apiData.role_permissions)) {
+            setOriginalRolePermissions(apiData.role_permissions)
+            setRolePermissions(apiData.role_permissions)
+          }
+          return
+        }
+      }
+
+      // Fallback trực tiếp tới Supabase nếu API không phản hồi
       const orgId = activeOrganization?.id
       const [rolesRes, permsRes, rolePermsRes] = await Promise.all([
         orgId 
@@ -351,7 +372,16 @@ export default function RolesSettingsPage() {
     return <div className="text-center py-12 text-sm text-slate-500">Đang tải dữ liệu...</div>
   }
 
-  const categories = Array.from(new Set(permissionsList.map(p => p.category)))
+  const CATEGORY_ORDER = ['overview', 'projects', 'tasks', 'incidents', 'improvements', 'staff', 'organization', 'reports', 'settings']
+
+  const categories = Array.from(new Set(permissionsList.map(p => p.category))).sort((a, b) => {
+    const idxA = CATEGORY_ORDER.indexOf(a)
+    const idxB = CATEGORY_ORDER.indexOf(b)
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB
+    if (idxA !== -1) return -1
+    if (idxB !== -1) return 1
+    return a.localeCompare(b)
+  })
   const activeRoleObj = roles.find(r => r.id === activeRoleTab)
   const isOwnerRole = activeRoleObj?.name === 'owner'
   const isCustomRole = activeRoleObj?.organization_id !== null && activeRoleObj?.organization_id !== undefined
