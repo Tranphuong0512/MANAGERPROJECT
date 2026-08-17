@@ -81,38 +81,38 @@ export function ProjectsHeader({
           <option value="archived">Lưu trữ</option>
         </select>
 
-        <div className="relative">
+        <div className="relative flex-1 sm:flex-initial min-w-[140px]">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Tìm kiếm dự án..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-48 h-[38px] pl-9 pr-4 bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 rounded-xl text-sm outline-none transition-all"
+            className="w-full sm:w-48 h-[38px] pl-9 pr-4 bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 rounded-xl text-sm outline-none transition-all"
           />
         </div>
 
-        <div className="flex items-center bg-slate-100 p-1 rounded-xl ml-2">
+        <div className="flex items-center bg-slate-100 p-1 rounded-xl">
           <button 
             onClick={() => setViewMode('list')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <LayoutList className="w-4 h-4" />
-            List
+            <span className="hidden xs:inline">List</span>
           </button>
           <button 
             onClick={() => setViewMode('board')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${viewMode === 'board' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors ${viewMode === 'board' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <LayoutGrid className="w-4 h-4" />
-            Board
+            <span className="hidden xs:inline">Board</span>
           </button>
           <button 
             onClick={() => setViewMode('gantt')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${viewMode === 'gantt' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors ${viewMode === 'gantt' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <CalendarRange className="w-4 h-4" />
-            Gantt
+            <span className="hidden xs:inline">Gantt</span>
           </button>
         </div>
       </div>
