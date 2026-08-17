@@ -540,18 +540,18 @@ export async function GET(
 
           const finalSubtasks = extractedSubtasks;
 
-          // Quy tắc xét duyệt công việc:
-          // 1. Sếp đã duyệt (EA.checked === true trên tất cả phân công) HOẶC server APEC báo đã duyệt/hoàn thành → "Đã duyệt" (done)
-          // 2. Chưa duyệt & (t.process >= 100 HOẶC tất cả EA/Subtasks đều đạt 100% HOẶC status là review) → "Chờ duyệt" (review)
-          // 3. Tiến độ > 0% → "Đang thực hiện" (in_progress)
-          // 4. Tiến độ === 0% → "Chưa làm" (todo)
+          // Quy tắc xét duyệt công việc theo chuẩn gốc APEC Global:
+          // 1. Sếp đã duyệt (EA.checked === true) HOẶC server APEC báo đã duyệt/hoàn thành (status = 4) → "Đã duyệt" (done)
+          // 2. Chưa duyệt & (t.process >= 100 HOẶC statusId = 3 / "Chờ duyệt") → "Chờ duyệt" (review)
+          // 3. t.process > 0 HOẶC statusId = 2 / "Đang thực hiện" HOẶC có tiến độ phân công → "Đang thực hiện" (in_progress)
+          // 4. statusId = 1 / "Chưa thực hiện" và t.process = 0 → "Chưa làm" (todo)
           const isApprovedByBoss = ea.length > 0 && ea.every((assign: any) => assign.checked === true);
           const parentProcess = Number(t.process ?? t.progress ?? 0);
           const taskStatusId = Number(t.status?.id || t.task_status?.id || t.status);
           const statusName = String(t.status?.name || t.status || '').toLowerCase();
           const isApecDone = taskStatusId === 4 || t.status === 'done' || t.status === 'completed' || t.status === 'resolved' || t.status === 'implemented' || statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || Boolean(t.is_completed);
           
-          // Tính tiến độ EA (Phân công nhân sự) & Subtasks
+          // Tính tiến độ phân công nhân sự & công việc con
           let eaAvg = 0;
           if (ea.length > 0) {
             const sum = ea.reduce((acc: number, cur: any) => acc + (Number(cur.process ?? cur.progress) || (cur.checked ? 100 : 0)), 0);
@@ -563,23 +563,12 @@ export async function GET(
             subAvg = Math.round(sum / finalSubtasks.length);
           }
 
-          // Kiểm tra xem tất cả công việc con / phân công nhân sự đã xong 100% chưa
-          const allEasDone = ea.length > 0 && ea.every((assign: any) => Number(assign.process ?? assign.progress ?? 0) >= 100 || assign.checked);
-          const allSubsDone = finalSubtasks.length > 0 && finalSubtasks.every((st: any) => Number(st.process ?? st.progress ?? 0) >= 100 || st.checked);
-          const hasChildrenDone100 = allEasDone || allSubsDone;
-
-          let avgProgress = Math.max(parentProcess, eaAvg, subAvg);
-          if (hasChildrenDone100 && avgProgress < 100) {
-            avgProgress = 100;
-          }
-
           let taskStatus = 'todo';
           if (isApecDone || isApprovedByBoss) {
             taskStatus = 'done'; // Sếp đã duyệt HOẶC server APEC đã duyệt
-          } else if (taskStatusId === 3 || statusName.includes('chờ duyệt') || statusName === 'review' || statusName.includes('chờ') || parentProcess >= 100 || avgProgress >= 100 || hasChildrenDone100) {
-            taskStatus = 'review'; // Công việc con hoặc tiến độ cha đạt 100% nhưng chưa duyệt → Chờ duyệt
-            avgProgress = 100; // Khi chờ duyệt hiển thị 100%
-          } else if (avgProgress > 0 || parentProcess > 0 || taskStatusId === 2 || statusName.includes('đang')) {
+          } else if (taskStatusId === 3 || statusName.includes('chờ duyệt') || statusName === 'review' || parentProcess >= 100) {
+            taskStatus = 'review'; // t.process đạt 100% hoặc server APEC set Chờ duyệt
+          } else if (parentProcess > 0 || taskStatusId === 2 || statusName.includes('đang') || eaAvg > 0 || subAvg > 0) {
             taskStatus = 'in_progress'; // Đang thực hiện
           } else {
             taskStatus = 'todo';
@@ -631,7 +620,7 @@ export async function GET(
             description: t.description || '',
             status: taskStatus,
             priority: (t.priority && t.priority.name) ? String(t.priority.name).toLowerCase() : 'medium',
-            progress: avgProgress,
+            progress: parentProcess,
             target_value: Number(t.target_value || 100),
             kpi_item_id: Number(t.kpi_item?.id || t.kpi_item_id || 47),
             start_date: resolvedStartDate,

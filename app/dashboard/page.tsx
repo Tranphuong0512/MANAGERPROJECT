@@ -615,20 +615,6 @@ export default function DashboardPage() {
               const sum = ea.reduce((acc: number, cur: any) => acc + (Number(cur.process ?? cur.progress) || (cur.checked ? 100 : 0)), 0);
               eaAvg = Math.round(sum / ea.length);
             }
-            let subAvg = 0;
-            if (Array.isArray(t.subtasks) && t.subtasks.length > 0) {
-              const sum = t.subtasks.reduce((a: number, b: any) => a + (Number(b.process || b.progress) || (b.checked ? 100 : 0)), 0);
-              subAvg = Math.round(sum / t.subtasks.length);
-            }
-
-            const allEasDone = ea.length > 0 && ea.every((assign: any) => Number(assign.process ?? assign.progress ?? 0) >= 100 || assign.checked);
-            const allSubsDone = Array.isArray(t.subtasks) && t.subtasks.length > 0 && t.subtasks.every((st: any) => Number(st.process ?? st.progress ?? 0) >= 100 || st.checked);
-            const hasChildrenDone100 = allEasDone || allSubsDone;
-
-            let avgProgress = Math.max(parentProcess, eaAvg, subAvg);
-            if (hasChildrenDone100 && avgProgress < 100) {
-              avgProgress = 100;
-            }
 
             const rawStatus = t.status || t.task_status;
             const statusId = typeof rawStatus === 'object' ? Number(rawStatus?.id) : (typeof t.task_status === 'object' ? Number(t.task_status?.id) : Number(rawStatus));
@@ -637,19 +623,15 @@ export default function DashboardPage() {
             // 1. Trạng thái Hoàn thành (Done / Đã duyệt)
             const isApecDone = isApprovedByBoss || statusId === 4 || rawStatus === 'done' || rawStatus === 'completed' || rawStatus === 'resolved' || rawStatus === 'implemented' || statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || statusName.includes('da duyet') || statusName.includes('đã phê duyệt') || Boolean(t.is_completed);
 
-            // 2. Trạng thái Chờ duyệt (Review): Khi công việc con đạt 100% hoặc tiến độ tổng hợp >= 100% hoặc status = 3 nhưng chưa duyệt
-            const isReview = !isApecDone && (statusId === 3 || rawStatus === 'review' || rawStatus === 'in_review' || rawStatus === 'pending_approval' || statusName.includes('chờ') || statusName.includes('đợi') || statusName.includes('pending') || parentProcess >= 100 || avgProgress >= 100 || hasChildrenDone100);
-
-            if (isReview && avgProgress < 100) {
-              avgProgress = 100;
-            }
+            // 2. Trạng thái Chờ duyệt (Review): Khi chưa duyệt VÀ (t.process >= 100 HOẶC statusId = 3 / 'Chờ duyệt')
+            const isReview = !isApecDone && (statusId === 3 || rawStatus === 'review' || rawStatus === 'in_review' || rawStatus === 'pending_approval' || statusName.includes('chờ') || statusName.includes('đợi') || statusName.includes('pending') || parentProcess >= 100);
 
             let resolvedStatus: 'todo' | 'in_progress' | 'review' | 'done' = 'todo';
             if (isApecDone) {
               resolvedStatus = 'done';
             } else if (isReview) {
               resolvedStatus = 'review';
-            } else if (avgProgress > 0 || parentProcess > 0 || statusId === 2 || statusName.includes('đang')) {
+            } else if (parentProcess > 0 || statusId === 2 || statusName.includes('đang') || eaAvg > 0) {
               resolvedStatus = 'in_progress';
             } else {
               resolvedStatus = 'todo';
@@ -755,7 +737,7 @@ export default function DashboardPage() {
               } : undefined,
               start_date: startDate,
               due_date: dueDate,
-              progress: avgProgress,
+              progress: parentProcess,
               status: resolvedStatus,
               priority: (t.priority?.name?.toLowerCase()?.includes('cao') ? 'high' : 'medium') as any,
               source: 'apec' as const,

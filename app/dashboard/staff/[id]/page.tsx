@@ -348,15 +348,8 @@ export default function StaffDetailPage() {
                   ? Math.round(subtasks.reduce((acc, st) => acc + st.process, 0) / subtasks.length)
                   : 0;
 
-                const allSubtasksDone = subtasks.length > 0 && subtasks.every(st => st.process >= 100 || st.checked);
-                const isAllEasDone = userEAs.length > 0 && userEAs.every((a: any) => Number(a.process ?? a.progress ?? 0) >= 100 || a.checked);
-                const hasSubtasksDone100 = allSubtasksDone || isAllEasDone;
-
-                // Tiến độ hiển thị: lấy max để hiển thị trên thanh progress
-                let progressVal = Math.max(taskLevelProcess, eaProgress, subtaskAvgProgress);
-                if (hasSubtasksDone100 && progressVal < 100) {
-                  progressVal = 100;
-                }
+                // Tiến độ hiển thị: lấy đúng % tiến độ công việc cha (t.process) từ server APEC Global
+                const progressVal = taskLevelProcess;
 
                 const abandonedTypes = ['HẰNG NGÀY', 'CHUNG', 'CÁ NHÂN'];
                 let checklistType = (typeof t.type === 'object' ? t.type?.name : t.type_name) || 'NHẬT KÝ CHUYÊN MÔN';
@@ -365,18 +358,21 @@ export default function StaffDetailPage() {
                 }
                 const parentTitle = t.title || t.name || 'Công việc Apec Global';
 
-                // BỘ QUY TẮC HIỂN THỊ TRẠNG THÁI & XÉT DUYỆT CÔNG VIỆC:
-                // 1. checked === true (trong mọi EA) → "Đã duyệt" ('done') — CHỈ khi sếp tích duyệt
-                // 2. checked === false & (t.process >= 100 HOẶC các công việc con đạt 100%) → "Chờ duyệt" ('review')
-                // 3. Tiến độ > 0% → "Đang thực hiện" ('in_progress')
-                // 4. Chưa có tiến độ → "Chưa làm" ('todo')
+                // BỘ QUY TẮC CHUẨN XÁC TỪ SERVER APEC GLOBAL:
+                // 1. "Đã duyệt" ('done'): Sếp đã tích checked === true HOẶC server APEC báo Hoàn thành / Đã duyệt (status = 4)
+                // 2. "Chờ duyệt" ('review'): Khi chưa duyệt VÀ (t.process >= 100 HOẶC statusId = 3 / 'Chờ duyệt')
+                // 3. "Đang thực hiện" ('in_progress'): Khi t.process > 0 HOẶC statusId = 2 / 'Đang thực hiện' HOẶC eaProgress > 0
+                // 4. "Chưa làm" ('todo'): Khi statusId = 1 / 'Chưa thực hiện' và t.process = 0
+                const taskStatusId = Number(t.status?.id || t.task_status?.id || t.status);
+                const statusName = String(t.status?.name || t.status || '').toLowerCase();
+                const isApecDone = isApprovedByBoss || taskStatusId === 4 || t.status === 'done' || t.status === 'completed' || t.status === 'resolved' || statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || Boolean(t.is_completed);
+
                 let resolvedStatus = 'todo';
-                if (isApprovedByBoss) {
+                if (isApecDone) {
                   resolvedStatus = 'done'; // Sếp đã tích checked = true → Đã duyệt
-                } else if (taskLevelProcess >= 100 || progressVal >= 100 || hasSubtasksDone100) {
-                  resolvedStatus = 'review'; // t.process đạt 100% hoặc subtasks 100% nhưng chưa duyệt → Chờ duyệt
-                  progressVal = 100;
-                } else if (progressVal > 0 || eaProgress > 0) {
+                } else if (taskStatusId === 3 || statusName.includes('chờ duyệt') || statusName === 'review' || taskLevelProcess >= 100) {
+                  resolvedStatus = 'review'; // t.process đạt 100% hoặc server APEC set Chờ duyệt
+                } else if (taskLevelProcess > 0 || taskStatusId === 2 || statusName.includes('đang') || eaProgress > 0) {
                   resolvedStatus = 'in_progress'; // Đang thực hiện
                 } else {
                   resolvedStatus = 'todo';

@@ -1843,13 +1843,13 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
                   const stStr = String(st || '').toLowerCase().trim();
                   
                   const isDone = isApprovedByBoss || Boolean(i.is_completed) || st === 'done' || st === 'completed' || taskSt === 4 || st === 4 || stStr.includes('hoàn thành') || stStr.includes('đã duyệt') || stStr.includes('da duyet') || stStr.includes('đã phê duyệt');
-                  const isReview = !isDone && (st === 'review' || taskSt === 3 || st === 3 || stStr.includes('chờ') || stStr.includes('đợi') || stStr.includes('pending') || prog >= 100 || allSubs100);
+                  const isReview = !isDone && (st === 'review' || taskSt === 3 || st === 3 || stStr.includes('chờ') || stStr.includes('đợi') || stStr.includes('pending') || prog >= 100);
 
                   if (isDone) {
                     completedCount++;
                   } else if (isReview) {
                     reviewCount++;
-                  } else if (st === 'in_progress' || taskSt === 2 || prog > 0) {
+                  } else if (st === 'in_progress' || taskSt === 2 || prog > 0 || stStr.includes('đang')) {
                     inProgressCount++;
                   } else {
                     todoCount++;
@@ -2051,13 +2051,11 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
                     };
                     const isTaskReview = (i: any) => {
                       if (isTaskDone(i)) return false;
-                      const subs = Array.isArray(i.employee_assignments) ? i.employee_assignments : [];
-                      const allSubs100 = subs.length > 0 && subs.every((a: any) => Number(a.process ?? a.progress ?? 0) >= 100 || a.checked);
                       const prog = Number(i.progress ?? i.process ?? 0);
                       const st = typeof i.status === 'object' ? i.status?.name || i.status?.id : i.status;
                       const taskSt = i.task_status?.id || i.task_status;
                       const stStr = String(st || '').toLowerCase().trim();
-                      return st === 'review' || taskSt === 3 || st === 3 || stStr.includes('chờ') || stStr.includes('đợi') || stStr.includes('pending') || prog >= 100 || allSubs100;
+                      return st === 'review' || taskSt === 3 || st === 3 || stStr.includes('chờ') || stStr.includes('đợi') || stStr.includes('pending') || prog >= 100;
                     };
 
                     const totalCount = dept.items.length;

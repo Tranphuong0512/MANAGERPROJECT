@@ -299,32 +299,15 @@ export async function POST(request: NextRequest) {
       const description = t.description || `Mã APEC: ${t.code || t.id}`;
       
       const parentProcess = Number(t.progress ?? t.process ?? 0);
-      let avgProgress = parentProcess;
-      const allEasDone = ea.length > 0 && ea.every((assign: any) => Number(assign.process ?? assign.progress ?? 0) >= 100 || assign.checked);
-
-      if (ea.length > 0) {
-        totalSubtasks += ea.length;
-        const sum = ea.reduce((acc: number, cur: any) => acc + (Number(cur.process || cur.progress) || (cur.checked ? 100 : 0)), 0);
-        avgProgress = Math.max(parentProcess, Math.round(sum / ea.length));
-      }
-
-      if (allEasDone && avgProgress < 100) {
-        avgProgress = 100;
-      }
-
       const isApprovedByBoss = ea.length > 0 && ea.every((assign: any) => assign.checked === true);
       const rawStatus = t.status || t.task_status;
       const statusId = typeof rawStatus === 'object' ? Number(rawStatus?.id) : (typeof t.task_status === 'object' ? Number(t.task_status?.id) : Number(rawStatus));
       const statusName = typeof rawStatus === 'object' ? String(rawStatus?.name || '').toLowerCase() : (typeof t.task_status === 'object' ? String(t.task_status?.name || '').toLowerCase() : String(rawStatus || '').toLowerCase());
 
       const isDone = isApprovedByBoss || statusId === 4 || rawStatus === 'done' || rawStatus === 'completed' || rawStatus === 'resolved' || rawStatus === 'implemented' || statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || statusName.includes('da duyet') || statusName.includes('đã phê duyệt') || Boolean(t.is_completed);
-      const isReview = !isDone && (statusId === 3 || rawStatus === 'review' || rawStatus === 'in_review' || rawStatus === 'pending_approval' || statusName.includes('chờ') || statusName.includes('đợi') || statusName.includes('pending') || parentProcess >= 100 || avgProgress >= 100 || allEasDone);
+      const isReview = !isDone && (statusId === 3 || rawStatus === 'review' || rawStatus === 'in_review' || rawStatus === 'pending_approval' || statusName.includes('chờ') || statusName.includes('đợi') || statusName.includes('pending') || parentProcess >= 100);
 
-      if (isReview && avgProgress < 100) {
-        avgProgress = 100;
-      }
-
-      const resolvedStatus = isDone ? 'done' : (isReview ? 'review' : (avgProgress > 0 || parentProcess > 0 ? 'in_progress' : 'todo'));
+      const resolvedStatus = isDone ? 'done' : (isReview ? 'review' : (parentProcess > 0 || statusId === 2 || statusName.includes('đang') ? 'in_progress' : 'todo'));
 
       const priorityName = typeof t.priority === 'object' ? String(t.priority?.name || '') : String(t.priority || '');
 
@@ -349,7 +332,7 @@ export async function POST(request: NextRequest) {
         description,
         status: resolvedStatus,
         priority: (priorityName.toLowerCase().includes('cao') ? 'high' : 'medium') as any,
-        progress_percentage: avgProgress,
+        progress_percentage: parentProcess,
         start_date: taskStartDate,
         due_date: taskDueDate,
         assigned_to: assignedStaffUuid && !assignedStaffUuid.startsWith('apec_') ? assignedStaffUuid : null,
@@ -369,7 +352,7 @@ export async function POST(request: NextRequest) {
           title,
           status: resolvedStatus,
           is_completed: isDone,
-          progress: avgProgress,
+          progress: parentProcess,
           start_date: taskStartDate,
           end_date: taskDueDate,
           due_date: taskDueDate,
