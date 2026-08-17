@@ -9,7 +9,7 @@ import { usePermissions, Permission } from '@/hooks/usePermissions'
 import {
   LayoutDashboard, FolderOpen, AlertTriangle,
   Building2, BarChart2, Settings, ChevronLeft, Users,
-  Shield, TrendingUp
+  Shield, TrendingUp, X
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -109,138 +109,171 @@ export function Sidebar({ open, setOpen }: SidebarProps) {
     loadProjects();
   }, [activeOrganization, projectStatusFilter])
 
+  const handleNavClick = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768 && setOpen) {
+      setOpen(false)
+    }
+  }
+
   return (
-    <div
-      className={`${open ? 'w-64' : 'w-20'
-        } bg-white transition-all duration-300 overflow-hidden flex flex-col border-r border-slate-200 relative z-20`}
-    >
-      <div className="h-16 flex items-center px-6 mb-4">
-        <div className="flex items-center gap-3 w-full">
-          <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 shadow-sm border border-slate-100">
-            <img src="/icon.jpg" alt="NIX.AI" className="w-full h-full object-cover" loading="lazy" />
-          </div>
-          {open && (
-            <div className="flex flex-col">
-              <span className="font-bold text-lg text-slate-900 tracking-tight leading-none mb-0.5">NIX.AI</span>
-              <span className="text-[10px] font-bold text-slate-500 tracking-wider">PROJECT MANAGER</span>
+    <>
+      {/* Mobile Backdrop Overlay */}
+      {open && (
+        <div
+          onClick={() => setOpen?.(false)}
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 md:hidden transition-opacity duration-300"
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar Container */}
+      <aside
+        className={`fixed md:relative inset-y-0 left-0 z-50 md:z-20 bg-white transition-all duration-300 ease-in-out flex flex-col border-r border-slate-200 overflow-hidden shadow-2xl md:shadow-none ${
+          open
+            ? 'translate-x-0 w-72 md:w-64'
+            : '-translate-x-full md:translate-x-0 w-72 md:w-20'
+        }`}
+      >
+        <div className="h-16 flex items-center justify-between px-5 mb-2 border-b border-slate-100/80 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 shadow-sm border border-slate-100">
+              <img src="/icon.jpg" alt="NIX.AI" className="w-full h-full object-cover" loading="lazy" />
             </div>
-          )}
-        </div>
-      </div>
-
-      <nav className="flex-1 px-4 space-y-1.5 overflow-y-auto overflow-x-hidden scrollbar-hide">
-        {navItems.map((item) => {
-          // Check permissions
-          if (item.permission) {
-            if (item.permission === 'owner_only') {
-              if (!isOwner && !hasPermission('view_settings')) return null;
-            } else {
-              // Only view_incidents is mapped above. If they have view_improvements they might also want to see it, 
-              // but we'll just check the exact permission mapped.
-              if (!hasPermission(item.permission as Permission)) return null;
-            }
-          }
-
-          const Icon = item.icon
-          const isActive = pathname === item.href || (pathname.startsWith(item.href + '/') && item.href !== '/dashboard')
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${isActive
-                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-200'
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              title={!open ? item.name : undefined}
-            >
-              <Icon className={`w-5 h-5 flex-shrink-0 transition-colors ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`} />
-              {open && <span className={`text-[15px] font-medium whitespace-nowrap ${isActive ? 'text-white' : 'text-slate-600 group-hover:text-slate-900'}`}>{item.name}</span>}
-            </Link>
-          )
-        })}
-
-        {/* Quick project selection */}
-        {open && hasPermission('view_projects') && activeOrganization && (
-          <div className="mt-8 mb-4">
-            <div className="px-3 mb-2 flex items-center justify-between">
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2 max-w-[120px]" title={activeOrganization.name}>
-                <Building2 className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="truncate">{activeOrganization.name}</span>
+            {(open || (typeof window !== 'undefined' && window.innerWidth < 768)) && (
+              <div className="flex flex-col">
+                <span className="font-bold text-lg text-slate-900 tracking-tight leading-none mb-0.5">NIX.AI</span>
+                <span className="text-[10px] font-bold text-slate-500 tracking-wider">PROJECT MANAGER</span>
               </div>
-              <select 
-                value={projectStatusFilter} 
-                onChange={e => setProjectStatusFilter(e.target.value)}
-                className="text-[10px] bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-slate-500 font-medium outline-none cursor-pointer hover:border-slate-300"
-              >
-                <option value="active">Đang chạy</option>
-                <option value="completed">Đã xong</option>
-                <option value="all">Tất cả</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              {orgProjects.map(p => (
-                <Link
-                  key={p.id}
-                  href={`/dashboard/projects/${p.id}`}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-200 group ${pathname === `/dashboard/projects/${p.id}`
-                      ? 'bg-blue-50 text-blue-700 font-medium'
-                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-                    }`}
-                  title={`${p.name} — Tổng: ${p.task_stats?.total || p.task_count || 0} | Đang/Chưa làm: ${p.task_stats?.active || 0} | Chờ duyệt: ${p.task_stats?.review || 0} | Hoàn thành: ${p.task_stats?.done || 0}`}
-                >
-                  <div className={`w-1.5 h-1.5 rounded-full transition-colors ${pathname === `/dashboard/projects/${p.id}` ? 'bg-blue-600' : 'bg-slate-300 group-hover:bg-slate-400'}`}></div>
-                  <span className="text-[13px] truncate flex-1 font-medium">{p.name}</span>
-                  
-                  {p.task_stats && p.task_stats.total > 0 ? (
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      {p.task_stats.active > 0 && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700" title="Đang & Chưa thực hiện">
-                          {p.task_stats.active}
-                        </span>
-                      )}
-                      {p.task_stats.review > 0 && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700" title="Chờ duyệt">
-                          {p.task_stats.review}
-                        </span>
-                      )}
-                      {p.task_stats.done > 0 && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700" title="Hoàn thành (Đã duyệt)">
-                          {p.task_stats.done}
-                        </span>
-                      )}
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600" title="Tổng việc cha">
-                        {p.task_stats.total}
-                      </span>
-                    </div>
-                  ) : (
-                    (p.task_count > 0 || (p.tasks?.[0]?.count > 0)) && (
-                      <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md font-semibold group-hover:bg-slate-200">
-                        {p.task_count !== undefined ? p.task_count : (p.tasks?.[0]?.count || 0)}
-                      </span>
-                    )
-                  )}
-                </Link>
-              ))}
-              {orgProjects.length === 0 && (
-                <div className="px-3 py-3 text-[11px] text-slate-400 text-center border border-dashed border-slate-200 rounded-lg mx-3">Không có dự án</div>
-              )}
-            </div>
+            )}
           </div>
-        )}
-      </nav>
 
-      {setOpen && (
-        <div className="p-4 mt-auto">
+          {/* Close button on mobile */}
           <button
-            onClick={() => setOpen(!open)}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors w-full"
+            onClick={() => setOpen?.(false)}
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 md:hidden transition-colors"
+            title="Đóng menu"
+            aria-label="Close sidebar"
           >
-            <ChevronLeft className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 ${!open && 'rotate-180'}`} />
-            {open && <span className="text-[15px] font-medium whitespace-nowrap">Thu gọn</span>}
+            <X className="w-5 h-5" />
           </button>
         </div>
-      )}
-    </div>
+
+        <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
+          {navItems.map((item) => {
+            // Check permissions
+            if (item.permission) {
+              if (item.permission === 'owner_only') {
+                if (!isOwner && !hasPermission('view_settings')) return null;
+              } else {
+                if (!hasPermission(item.permission as Permission)) return null;
+              }
+            }
+
+            const Icon = item.icon
+            const isActive = pathname === item.href || (pathname.startsWith(item.href + '/') && item.href !== '/dashboard')
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={handleNavClick}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-200'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+                title={!open ? item.name : undefined}
+              >
+                <Icon className={`w-5 h-5 flex-shrink-0 transition-colors ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                <span className={`text-sm font-medium whitespace-nowrap ${isActive ? 'text-white font-bold' : 'text-slate-600 group-hover:text-slate-900'} ${!open ? 'md:hidden' : ''}`}>
+                  {item.name}
+                </span>
+              </Link>
+            )
+          })}
+
+          {/* Quick project selection */}
+          {hasPermission('view_projects') && activeOrganization && (
+            <div className={`mt-6 mb-4 ${!open ? 'md:hidden' : ''}`}>
+              <div className="px-3 mb-2 flex items-center justify-between">
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 max-w-[130px]" title={activeOrganization.name}>
+                  <Building2 className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate">{activeOrganization.name}</span>
+                </div>
+                <select 
+                  value={projectStatusFilter} 
+                  onChange={e => setProjectStatusFilter(e.target.value)}
+                  className="text-[10px] bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-slate-500 font-medium outline-none cursor-pointer hover:border-slate-300"
+                >
+                  <option value="active">Đang chạy</option>
+                  <option value="completed">Đã xong</option>
+                  <option value="all">Tất cả</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                {orgProjects.map(p => (
+                  <Link
+                    key={p.id}
+                    href={`/dashboard/projects/${p.id}`}
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-200 group ${
+                      pathname === `/dashboard/projects/${p.id}`
+                        ? 'bg-blue-50 text-blue-700 font-medium'
+                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                    title={`${p.name} — Tổng: ${p.task_stats?.total || p.task_count || 0}`}
+                  >
+                    <div className={`w-1.5 h-1.5 rounded-full transition-colors ${pathname === `/dashboard/projects/${p.id}` ? 'bg-blue-600' : 'bg-slate-300 group-hover:bg-slate-400'}`}></div>
+                    <span className="text-[13px] truncate flex-1 font-medium">{p.name}</span>
+                    
+                    {p.task_stats && p.task_stats.total > 0 ? (
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {p.task_stats.active > 0 && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700" title="Đang & Chưa thực hiện">
+                            {p.task_stats.active}
+                          </span>
+                        )}
+                        {p.task_stats.review > 0 && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700" title="Chờ duyệt">
+                            {p.task_stats.review}
+                          </span>
+                        )}
+                        {p.task_stats.done > 0 && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700" title="Hoàn thành (Đã duyệt)">
+                            {p.task_stats.done}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      (p.task_count > 0 || (p.tasks?.[0]?.count > 0)) && (
+                        <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md font-semibold group-hover:bg-slate-200">
+                          {p.task_count !== undefined ? p.task_count : (p.tasks?.[0]?.count || 0)}
+                        </span>
+                      )
+                    )}
+                  </Link>
+                ))}
+                {orgProjects.length === 0 && (
+                  <div className="px-3 py-3 text-[11px] text-slate-400 text-center border border-dashed border-slate-200 rounded-lg mx-2">Không có dự án</div>
+                )}
+              </div>
+            </div>
+          )}
+        </nav>
+
+        {/* Desktop Collapse Button */}
+        {setOpen && (
+          <div className="p-3 mt-auto hidden md:block border-t border-slate-100">
+            <button
+              onClick={() => setOpen(!open)}
+              className="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors w-full"
+            >
+              <ChevronLeft className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 ${!open && 'rotate-180'}`} />
+              {open && <span className="text-sm font-medium whitespace-nowrap">Thu gọn</span>}
+            </button>
+          </div>
+        )}
+      </aside>
+    </>
   )
 }

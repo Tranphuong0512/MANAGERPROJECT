@@ -428,23 +428,23 @@ export default function RolesSettingsPage() {
         </div>
       </div>
 
-      <div className="flex gap-2 border-b border-slate-200">
+      <div className="flex gap-2 border-b border-slate-200 overflow-x-auto custom-scrollbar pb-1">
         <button
           onClick={() => setActiveTab('matrix')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'matrix' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'matrix' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
         >
           Vai trò & Phân quyền
         </button>
         <button
           onClick={() => setActiveTab('accounts')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'accounts' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'accounts' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
         >
           <Users className="w-4 h-4" />
           Gán tài khoản
         </button>
         <button
           onClick={() => setActiveTab('api')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'api' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'api' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
         >
           <Code className="w-4 h-4" />
           Kết nối API
@@ -455,12 +455,12 @@ export default function RolesSettingsPage() {
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
           
           {/* Roles Tabs */}
-          <div className="flex flex-wrap gap-2 items-center border-b border-slate-200 pb-2">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar border-b border-slate-200 -mx-1 px-1">
             {roles.map(role => (
               <button
                 key={role.id}
                 onClick={() => setActiveRoleTab(role.id)}
-                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-2
+                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-2 shrink-0 whitespace-nowrap
                   ${activeRoleTab === role.id ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600' : 'text-slate-600 hover:bg-slate-50'}
                 `}
               >
@@ -475,14 +475,14 @@ export default function RolesSettingsPage() {
             ))}
             <button
               onClick={() => setIsAddRoleOpen(true)}
-              className="px-3 py-1.5 ml-2 text-xs font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 rounded-md transition-colors flex items-center gap-1"
+              className="px-3 py-1.5 ml-2 text-xs font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 rounded-md transition-colors flex items-center gap-1 shrink-0 whitespace-nowrap"
             >
               <Plus className="w-3 h-3" /> Thêm vai trò
             </button>
           </div>
 
-          <div className="flex justify-between items-center h-8">
-            <div className="text-sm text-slate-500">
+          <div className="flex flex-wrap justify-between items-center gap-2 min-h-8">
+            <div className="text-xs sm:text-sm text-slate-500">
               Cấu hình quyền cho: <span className="font-semibold text-slate-800">{activeRoleObj?.description}</span>
               {isOwnerRole && <span className="ml-2 text-xs text-orange-500 bg-orange-50 px-2 py-0.5 rounded border border-orange-100">Toàn quyền (Không thể sửa)</span>}
             </div>
@@ -524,7 +524,7 @@ export default function RolesSettingsPage() {
                   </button>
                   
                   {isOpen && (
-                    <div className="p-4 bg-white grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="p-3 sm:p-4 bg-white grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3">
                       {perms.map(permission => {
                         const action = permission.name.split('_')[0]
                         const displayActionName = actionTranslations[action] || action

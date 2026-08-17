@@ -1706,20 +1706,20 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-0 overflow-hidden shadow-sm">
-      <div className="flex items-center justify-between p-4 border-b border-slate-100">
-        <div className="flex items-center gap-3">
-          <h3 className="font-bold text-slate-800">Checklist & Công việc</h3>
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 sm:p-4 border-b border-slate-100">
+        <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+          <h3 className="font-bold text-slate-800 text-sm sm:text-base">Checklist & Công việc</h3>
           {syncStatusText && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
               {syncStatusText}
             </span>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button 
             onClick={() => setShowDateFilter(!showDateFilter)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-semibold transition-colors ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 border rounded-lg text-xs font-semibold transition-colors ${
               hasActiveFilter 
                 ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100' 
                 : 'border-slate-200 text-slate-600 hover:bg-slate-50'

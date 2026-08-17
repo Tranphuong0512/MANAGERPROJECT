@@ -83,16 +83,16 @@ export const MonitorStatsRow = React.memo(function MonitorStatsRow({ stats }: Mo
   ]
 
   return (
-    <div className="grid grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 sm:gap-3 mb-6">
       {cards.map((card, i) => (
-        <div key={i} className="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center gap-2.5">
-          <div className={`w-9 h-9 rounded-lg ${card.iconBg} flex items-center justify-center shadow-sm flex-shrink-0`}>
+        <div key={i} className="bg-white rounded-xl p-2.5 sm:p-3 shadow-xs hover:shadow-sm border border-slate-100 flex items-center gap-2.5 transition-all">
+          <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg ${card.iconBg} flex items-center justify-center shadow-xs flex-shrink-0`}>
             <card.icon className="w-4 h-4 text-white" />
           </div>
-          <div className="min-w-0">
-            <p className="text-[10px] font-medium text-slate-500 truncate">{card.title}</p>
-            <h2 className="font-bold text-slate-800 text-lg leading-tight">{card.value}</h2>
-            <p className="text-[9px] font-medium text-slate-400 truncate hidden lg:block">{card.desc}</p>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] sm:text-[10px] font-medium text-slate-500 truncate">{card.title}</p>
+            <h2 className="font-bold text-slate-800 text-base sm:text-lg leading-tight">{card.value}</h2>
+            <p className="text-[9px] font-medium text-slate-400 truncate hidden xl:block">{card.desc}</p>
           </div>
         </div>
       ))}

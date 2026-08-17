@@ -701,16 +701,16 @@ export function DepartmentTasksOverviewTable({
   }
 
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 mb-8 transition-all">
+    <div className="bg-white rounded-2xl p-3.5 sm:p-6 shadow-sm border border-slate-200/80 mb-8 transition-all">
       {/* ─── HEADER: TITLE & STATS COUNTER ─── */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-100">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-            <Building2 className="w-5 h-5" />
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 pb-4 sm:pb-5 border-b border-slate-100">
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 shrink-0 mt-0.5 sm:mt-0">
+            <Building2 className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-slate-900">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
                 Bảng Giám Sát & Duyệt Công Việc Theo Phòng Ban
               </h2>
               {stats.review > 0 && (
@@ -753,9 +753,9 @@ export function DepartmentTasksOverviewTable({
       </div>
 
       {/* ─── FILTERS TOOLBAR ─── */}
-      <div className="space-y-4 pt-5">
+      <div className="space-y-3.5 pt-4">
         {/* Quick Filter Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1.5 custom-scrollbar -mx-1 px-1">
           <button
             onClick={() => { setActiveTab('all'); setCurrentPage(1) }}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
@@ -817,7 +817,7 @@ export function DepartmentTasksOverviewTable({
         </div>
 
         {/* Detailed Dropdown Filters & Search */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2.5 sm:gap-3">
           {/* 1. Lọc theo Phòng Ban */}
           <div className="relative">
             <label className="block text-[11px] font-bold text-slate-500 mb-1">

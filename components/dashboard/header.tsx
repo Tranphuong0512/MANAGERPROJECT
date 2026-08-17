@@ -104,40 +104,42 @@ export function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
   const isLoading = isLoadingUser || isLoadingOrgs
 
   return (
-    <header suppressHydrationWarning className="bg-white border-b border-slate-200 px-6 h-16 flex items-center justify-between z-40 sticky top-0">
-      {/* Left section: Org Selector */}
-      <div className="flex items-center gap-4 w-1/4">
+    <header suppressHydrationWarning className="bg-white border-b border-slate-200 px-3 sm:px-6 h-16 flex items-center justify-between z-40 sticky top-0">
+      {/* Left section: Org Selector & Mobile/Desktop Hamburger */}
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-2 hover:bg-slate-50 rounded-xl text-slate-500 hidden md:block"
+          className="p-2 hover:bg-slate-100 rounded-xl text-slate-600 transition-colors flex items-center justify-center focus:outline-none"
+          title={sidebarOpen ? "Đóng menu" : "Mở menu"}
+          aria-label="Toggle navigation menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-3 px-3 py-1.5 rounded-xl border border-slate-100 bg-slate-50/50 select-none">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+        <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 rounded-xl border border-slate-100 bg-slate-50/50 select-none">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-sm shrink-0">
             {activeOrganization?.name?.charAt(0) || 'A'}
           </div>
-          <div>
-            <div className="text-sm font-semibold text-slate-900 leading-tight">
+          <div className="hidden xs:block min-w-0">
+            <div className="text-xs sm:text-sm font-semibold text-slate-900 leading-tight truncate max-w-[120px] sm:max-w-[180px]">
               {activeOrganization?.name || 'ApecGlobal'}
             </div>
-            <div className="text-[11px] text-blue-600 font-medium">Workspace</div>
+            <div className="text-[10px] sm:text-[11px] text-blue-600 font-medium leading-none mt-0.5">Workspace</div>
           </div>
         </div>
       </div>
 
       {/* Center section: Search */}
-      <div className="flex-1 max-w-2xl px-4" ref={searchRef}>
+      <div className="flex-1 max-w-xl px-2 sm:px-4 min-w-0" ref={searchRef}>
         <div className="relative group">
-          <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 group-focus-within:text-blue-500 transition-colors" />
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 group-focus-within:text-blue-500 transition-colors" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => { if (searchQuery.trim().length > 0) setShowSearchResults(true) }}
             placeholder="Tìm kiếm dự án..."
-            className="w-full h-10 pl-10 pr-4 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-full text-sm outline-none transition-all"
+            className="w-full h-9 sm:h-10 pl-9 sm:pl-10 pr-3 sm:pr-4 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-full text-xs sm:text-sm outline-none transition-all"
           />
 
           {showSearchResults && (
@@ -176,37 +178,37 @@ export function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
       </div>
 
       {/* Right section: Actions & Profile */}
-      <div className="flex items-center justify-end gap-2 w-auto">
+      <div className="flex items-center justify-end gap-1.5 sm:gap-2 shrink-0">
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => checkNow(true)}
             disabled={isChecking}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm ${
               updateInfo?.update_available
                 ? 'bg-amber-500 hover:bg-amber-600 text-white animate-bounce shadow-amber-200'
                 : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
             }`}
-            title="Kiểm tra phiên bản mới phát hành trên GitHub (Tranphuong0512/MANAGERPROJECT)"
+            title="Kiểm tra phiên bản mới phát hành trên GitHub"
           >
             <Sparkles className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin text-blue-600' : (updateInfo?.update_available ? 'text-white' : 'text-amber-500')}`} />
-            <span className="hidden lg:inline">
+            <span className="hidden md:inline">
               {isChecking ? 'Đang kiểm tra...' : updateInfo?.update_available ? `Cập nhật v${updateInfo.latest_version}` : 'Check Cập Nhật'}
             </span>
           </button>
         </div>
 
-        <button className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-50 rounded-full border border-slate-200 text-sm font-medium transition-colors">
-          <Filter className="w-4 h-4" />
-          Bộ lọc
-          <ChevronDown className="w-4 h-4" />
+        <button className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-slate-600 hover:bg-slate-50 rounded-full border border-slate-200 text-xs sm:text-sm font-medium transition-colors">
+          <Filter className="w-3.5 h-3.5" />
+          <span>Bộ lọc</span>
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
         </button>
 
-        <button className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-colors mx-1">
-          <Bell className="w-5 h-5" />
+        <button className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-colors">
+          <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
         </button>
 
-        <div className="h-6 w-[1px] bg-slate-200 mx-1"></div>
+        <div className="h-5 w-[1px] bg-slate-200 mx-0.5 sm:mx-1"></div>
 
         {!isLoading && user && (
           <div className="flex items-center gap-3 pl-2 cursor-pointer group relative">

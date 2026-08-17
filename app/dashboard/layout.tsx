@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Sidebar } from '@/components/dashboard/sidebar'
 import { Header } from '@/components/dashboard/header'
 import { OrganizationProvider } from '@/components/providers/organization-provider'
@@ -14,7 +14,14 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Tự động mở sidebar trên desktop lớn, đóng trên mobile/tablet để không che khuất nội dung
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+      setSidebarOpen(true)
+    }
+  }, [])
 
   return (
     <OrganizationProvider>
@@ -23,10 +30,10 @@ export default function DashboardLayout({
           <AutoUpdateProvider>
             <div className="h-screen bg-slate-50 flex flex-col overflow-hidden">
               <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-              <div className="flex flex-1 overflow-hidden">
+              <div className="flex flex-1 overflow-hidden relative">
                 <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
                 <main className="flex-1 overflow-y-auto bg-[#F8F9FB]">
-                  <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                  <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
                     {children}
                   </div>
                 </main>

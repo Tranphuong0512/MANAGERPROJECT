@@ -421,61 +421,61 @@ export default function StaffPage() {
                       key={group.name}
                       className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-all duration-300"
                     >
-                      {/* Department Header Row (Bên ngoài phòng ban: Thống kê số nhân sự, công việc, rủi ro, sự cố, cải tiến) */}
+                      {/* Department Header Row */}
                       <div
                         onClick={() => setExpandedDepts(prev => ({ ...prev, [group.name]: !isExpanded }))}
-                        className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5 bg-gradient-to-r from-slate-50/80 to-white hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-100"
+                        className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 p-3.5 sm:p-5 bg-gradient-to-r from-slate-50/80 to-white hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-100"
                       >
                         {/* Left: Department Icon + Name + Staff count badge */}
-                        <div className="flex items-center gap-3 min-w-[240px]">
-                          <div className="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center font-bold border border-blue-100 shrink-0 shadow-xs">
-                            <Building2 className="w-5 h-5" />
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center font-bold border border-blue-100 shrink-0 shadow-xs">
+                            <Building2 className="w-4 h-4 sm:w-5 sm:h-5" />
                           </div>
-                          <div>
+                          <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="font-bold text-slate-900 text-lg hover:text-blue-600 transition-colors">
+                              <h3 className="font-bold text-slate-900 text-base sm:text-lg hover:text-blue-600 transition-colors truncate">
                                 {group.name}
                               </h3>
-                              <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 font-bold text-xs rounded-full border border-blue-200">
+                              <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 font-bold text-xs rounded-full border border-blue-200 shrink-0">
                                 {group.staffCount} nhân sự
                               </span>
                             </div>
-                            <p className="text-xs text-slate-500 mt-0.5">
+                            <p className="text-xs text-slate-500 mt-0.5 truncate">
                               Nhấp để {isExpanded ? 'thu gọn' : 'hiển thị danh sách nhân sự liên quan'}
                             </p>
                           </div>
                         </div>
 
-                        {/* Right: Statistics summary (bên ngoài phòng ban) */}
-                        <div className="flex flex-wrap items-center gap-3 sm:gap-5 ml-auto">
+                        {/* Right: Statistics summary */}
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:ml-auto">
                           {/* Công việc & Tiến độ */}
-                          <div className="flex items-center gap-3 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-100" title="Tổng số công việc và tiến độ trung bình của phòng ban">
+                          <div className="flex items-center gap-2 sm:gap-3 bg-slate-50 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl border border-slate-100" title="Tổng số công việc và tiến độ trung bình của phòng ban">
                             <FolderKanban className="w-4 h-4 text-blue-500 shrink-0" />
                             <div className="text-right">
-                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tiến độ chung</div>
-                              <div className="text-sm font-black text-blue-600">
-                                {group.avgProgress}% <span className="text-xs font-semibold text-slate-500">({group.completedTasks}/{group.totalTasks} việc)</span>
+                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tiến độ</div>
+                              <div className="text-xs sm:text-sm font-black text-blue-600">
+                                {group.avgProgress}% <span className="text-[11px] font-semibold text-slate-500">({group.completedTasks}/{group.totalTasks})</span>
                               </div>
                             </div>
-                            <div className="w-16 bg-slate-200 h-2 rounded-full overflow-hidden hidden sm:block">
+                            <div className="w-12 sm:w-16 bg-slate-200 h-1.5 sm:h-2 rounded-full overflow-hidden hidden sm:block">
                               <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full" style={{ width: `${group.avgProgress}%` }}></div>
                             </div>
                           </div>
 
                           {/* Rủi ro & Sự cố */}
-                          <div className="flex items-center gap-1.5 bg-rose-50 text-rose-600 px-3 py-2 rounded-xl text-xs font-bold border border-rose-100" title="Tổng số rủi ro, sự cố liên quan trong phòng ban">
-                            <AlertTriangle className="w-4 h-4 shrink-0" />
-                            <span>{group.totalIncidents} sự cố / rủi ro</span>
+                          <div className="flex items-center gap-1.5 bg-rose-50 text-rose-600 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold border border-rose-100" title="Tổng số rủi ro, sự cố liên quan trong phòng ban">
+                            <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                            <span>{group.totalIncidents} sự cố</span>
                           </div>
 
                           {/* Sáng kiến & Cải tiến */}
-                          <div className="flex items-center gap-1.5 bg-amber-50 text-amber-600 px-3 py-2 rounded-xl text-xs font-bold border border-amber-100" title="Tổng số sáng kiến, cải tiến trong phòng ban">
-                            <Lightbulb className="w-4 h-4 shrink-0" />
-                            <span>{group.totalImprovements} sáng kiến</span>
+                          <div className="flex items-center gap-1.5 bg-amber-50 text-amber-600 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold border border-amber-100" title="Tổng số sáng kiến, cải tiến trong phòng ban">
+                            <Lightbulb className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                            <span>{group.totalImprovements} cải tiến</span>
                           </div>
 
                           {/* Expand/Collapse Chevron */}
-                          <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0 ml-auto lg:ml-0">
                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </div>
                         </div>

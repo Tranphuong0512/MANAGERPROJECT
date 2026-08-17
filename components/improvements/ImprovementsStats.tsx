@@ -46,16 +46,16 @@ export function ImprovementsStats({ stats }: ImprovementsStatsProps) {
   ]
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-4 mb-6">
       {cards.map((card, i) => (
-        <div key={i} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-          <div className="flex items-center gap-3 mb-3">
-            <div className={`w-12 h-12 rounded-xl ${card.iconBg} flex items-center justify-center shadow-sm`}>
-              <card.icon className="w-6 h-6 text-white" />
+        <div key={i} className="bg-white rounded-2xl p-3.5 sm:p-5 shadow-xs border border-slate-100 flex flex-col justify-between">
+          <div className="flex items-center gap-2.5 sm:gap-3 mb-2 sm:mb-3">
+            <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl ${card.iconBg} flex items-center justify-center shadow-xs shrink-0`}>
+              <card.icon className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
             </div>
-            <div className="flex-1">
-              <p className="text-[13px] font-medium text-slate-500">{card.title}</p>
-              <h2 className="font-bold text-slate-800 mt-0.5 text-2xl">{card.value}</h2>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs sm:text-[13px] font-medium text-slate-500 truncate">{card.title}</p>
+              <h2 className="font-bold text-slate-800 text-lg sm:text-2xl leading-tight">{card.value}</h2>
             </div>
           </div>
           <p className="text-[11px] font-medium text-slate-500">{card.desc}</p>

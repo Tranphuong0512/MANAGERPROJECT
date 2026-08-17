@@ -665,16 +665,16 @@ export default function StaffDetailPage() {
       </div>
 
       {/* HEADER SECTION */}
-      <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 mb-6 flex flex-col md:flex-row gap-8 items-start md:items-center relative overflow-hidden">
+      <div className="bg-white rounded-3xl p-4 sm:p-8 shadow-sm border border-slate-100 mb-6 flex flex-col md:flex-row gap-5 md:gap-8 items-center md:items-center text-center md:text-left relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-blue-50 to-transparent rounded-bl-full -z-0"></div>
         
-        <div className="w-24 h-24 md:w-32 md:h-32 rounded-full bg-gradient-to-tr from-blue-600 to-cyan-500 flex items-center justify-center text-white font-bold text-4xl md:text-5xl shadow-lg border-4 border-white flex-shrink-0 z-10">
+        <div className="w-20 h-20 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-full bg-gradient-to-tr from-blue-600 to-cyan-500 flex items-center justify-center text-white font-bold text-3xl sm:text-4xl md:text-5xl shadow-lg border-4 border-white shrink-0 z-10">
           {staffProfile.full_name.charAt(0).toUpperCase()}
         </div>
 
-        <div className="flex-1 z-10">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">{staffProfile.full_name}</h1>
-          <div className="flex flex-wrap gap-4 text-sm text-slate-600 font-medium mb-4">
+        <div className="flex-1 z-10 w-full">
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2 leading-tight">{staffProfile.full_name}</h1>
+          <div className="flex flex-wrap justify-center md:justify-start gap-2.5 sm:gap-4 text-xs sm:text-sm text-slate-600 font-medium mb-4">
             <span className="flex items-center gap-1.5"><Briefcase className="w-4 h-4 text-slate-400" /> {staffProfile.role}</span>
             <span className="flex items-center gap-1.5">
               <Building2 className="w-4 h-4 text-slate-400" /> 
@@ -682,59 +682,59 @@ export default function StaffDetailPage() {
             </span>
           </div>
           
-          <div className="flex gap-4">
-            <a href={`tel:${staffProfile.phone}`} className="flex items-center gap-2 px-4 py-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-sm font-semibold text-slate-700 transition-colors border border-slate-200">
-              <Phone className="w-4 h-4 text-green-600" /> {staffProfile.phone}
+          <div className="flex flex-wrap justify-center md:justify-start gap-2.5 sm:gap-3">
+            <a href={`tel:${staffProfile.phone}`} className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 transition-colors border border-slate-200">
+              <Phone className="w-3.5 h-3.5 text-green-600" /> {staffProfile.phone}
             </a>
-            <a href={`mailto:${staffProfile.email}`} className="flex items-center gap-2 px-4 py-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-sm font-semibold text-slate-700 transition-colors border border-slate-200">
-              <Mail className="w-4 h-4 text-blue-600" /> {staffProfile.email}
+            <a href={`mailto:${staffProfile.email}`} className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 transition-colors border border-slate-200">
+              <Mail className="w-3.5 h-3.5 text-blue-600" /> {staffProfile.email}
             </a>
           </div>
         </div>
 
         {/* OVERALL STATS */}
         {staffProfile?.isSoftwareAccount ? (
-          <div className="grid grid-cols-2 gap-3 md:w-auto w-full z-10">
-            <div className="bg-blue-50/70 rounded-2xl p-3.5 text-center border border-blue-100 min-w-[120px]">
-              <div className="text-2xl font-black text-blue-600 mb-0.5">{userPermissions.length}</div>
-              <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Quyền đã gán</div>
-              <div className="text-[10px] font-semibold text-blue-600 mt-0.5">Quyền hạn hệ thống</div>
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:w-auto w-full z-10">
+            <div className="bg-blue-50/70 rounded-2xl p-3 sm:p-3.5 text-center border border-blue-100 min-w-[110px]">
+              <div className="text-xl sm:text-2xl font-black text-blue-600 mb-0.5">{userPermissions.length}</div>
+              <div className="text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-wider">Quyền đã gán</div>
+              <div className="text-[9px] sm:text-[10px] font-semibold text-blue-600 mt-0.5">Quyền hạn hệ thống</div>
             </div>
-            <div className="bg-indigo-50/70 rounded-2xl p-3.5 text-center border border-indigo-100 min-w-[120px]">
-              <div className="text-2xl font-black text-indigo-600 mb-0.5">{userAuditLogs.length}</div>
-              <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Hoạt động ghi nhận</div>
-              <div className="text-[10px] font-semibold text-indigo-600 mt-0.5">Lịch sử thao tác</div>
+            <div className="bg-indigo-50/70 rounded-2xl p-3 sm:p-3.5 text-center border border-indigo-100 min-w-[110px]">
+              <div className="text-xl sm:text-2xl font-black text-indigo-600 mb-0.5">{userAuditLogs.length}</div>
+              <div className="text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-wider">Hoạt động ghi nhận</div>
+              <div className="text-[9px] sm:text-[10px] font-semibold text-indigo-600 mt-0.5">Lịch sử thao tác</div>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 md:w-auto w-full z-10">
-            <div className="bg-blue-50/70 rounded-2xl p-3.5 text-center border border-blue-100 min-w-[105px]">
-              <div className="text-2xl font-black text-blue-600 mb-0.5">{staffStats.parentCount}</div>
-              <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Công việc cha</div>
-              <div className="text-[10px] font-semibold text-blue-600 mt-0.5">Xong {staffStats.parentCompleted}</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 md:w-auto w-full z-10">
+            <div className="bg-blue-50/70 rounded-2xl p-2.5 sm:p-3.5 text-center border border-blue-100 min-w-[95px]">
+              <div className="text-xl sm:text-2xl font-black text-blue-600 mb-0.5">{staffStats.parentCount}</div>
+              <div className="text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-wider">Việc cha</div>
+              <div className="text-[9px] sm:text-[10px] font-semibold text-blue-600 mt-0.5">Xong {staffStats.parentCompleted}</div>
             </div>
-            <div className="bg-indigo-50/70 rounded-2xl p-3.5 text-center border border-indigo-100 min-w-[105px]">
-              <div className="text-2xl font-black text-indigo-600 mb-0.5">{staffStats.subtaskCount}</div>
-              <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Công việc con</div>
-              <div className="text-[10px] font-semibold text-indigo-600 mt-0.5">Xong {staffStats.subtaskCompleted}</div>
+            <div className="bg-indigo-50/70 rounded-2xl p-2.5 sm:p-3.5 text-center border border-indigo-100 min-w-[95px]">
+              <div className="text-xl sm:text-2xl font-black text-indigo-600 mb-0.5">{staffStats.subtaskCount}</div>
+              <div className="text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-wider">Việc con</div>
+              <div className="text-[9px] sm:text-[10px] font-semibold text-indigo-600 mt-0.5">Xong {staffStats.subtaskCompleted}</div>
             </div>
-            <div className="bg-rose-50/70 rounded-2xl p-3.5 text-center border border-rose-100 min-w-[105px]">
-              <div className="text-2xl font-black text-rose-600 mb-0.5">{staffStats.riskCount}</div>
-              <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Rủi ro & Sự cố</div>
-              <div className="text-[10px] font-semibold text-rose-600 mt-0.5">Sự cố & rủi ro</div>
+            <div className="bg-rose-50/70 rounded-2xl p-2.5 sm:p-3.5 text-center border border-rose-100 min-w-[95px]">
+              <div className="text-xl sm:text-2xl font-black text-rose-600 mb-0.5">{staffStats.riskCount}</div>
+              <div className="text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-wider">Rủi ro</div>
+              <div className="text-[9px] sm:text-[10px] font-semibold text-rose-600 mt-0.5">Sự cố</div>
             </div>
-            <div className="bg-amber-50/70 rounded-2xl p-3.5 text-center border border-amber-100 min-w-[105px]">
-              <div className="text-2xl font-black text-amber-600 mb-0.5">{staffStats.improvementCount}</div>
-              <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Cải tiến</div>
-              <div className="text-[10px] font-semibold text-amber-600 mt-0.5">Sáng kiến</div>
+            <div className="bg-amber-50/70 rounded-2xl p-2.5 sm:p-3.5 text-center border border-amber-100 min-w-[95px]">
+              <div className="text-xl sm:text-2xl font-black text-amber-600 mb-0.5">{staffStats.improvementCount}</div>
+              <div className="text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-wider">Cải tiến</div>
+              <div className="text-[9px] sm:text-[10px] font-semibold text-amber-600 mt-0.5">Sáng kiến</div>
             </div>
-            <div className="bg-red-50/80 rounded-2xl p-3.5 text-center border border-red-200 min-w-[105px] col-span-2 sm:col-span-1">
-              <div className="text-2xl font-black text-red-600 mb-0.5 flex items-center justify-center gap-1">
+            <div className="bg-red-50/80 rounded-2xl p-2.5 sm:p-3.5 text-center border border-red-200 min-w-[95px] col-span-2 sm:col-span-1">
+              <div className="text-xl sm:text-2xl font-black text-red-600 mb-0.5 flex items-center justify-center gap-1">
                 {staffStats.overdueCount > 0 && <AlertTriangle className="w-4 h-4 text-red-600 animate-pulse" />}
                 {staffStats.overdueCount}
               </div>
-              <div className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Trễ hạn</div>
-              <div className="text-[10px] font-semibold text-red-600 mt-0.5">Cần xử lý ngay</div>
+              <div className="text-[10px] sm:text-[11px] font-bold text-red-700 uppercase tracking-wider">Trễ hạn</div>
+              <div className="text-[9px] sm:text-[10px] font-semibold text-red-600 mt-0.5">Cần xử lý</div>
             </div>
           </div>
         )}
@@ -1175,7 +1175,7 @@ export default function StaffDetailPage() {
 
                                 {/* LEVEL 3: SUBTASKS DROPDOWN */}
                                 {isParentExpanded(task.id) && hasSubtasks && (
-                                  <div className="bg-slate-50/80 border-t border-slate-100 px-6 py-3 space-y-2">
+                                  <div className="bg-slate-50/80 border-t border-slate-100 px-3 sm:px-6 py-2.5 sm:py-3 space-y-2">
                                     <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/70">
                                       <span className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
                                         <CornerDownRight className="w-3.5 h-3.5 text-blue-600" />
