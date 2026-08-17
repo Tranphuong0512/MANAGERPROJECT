@@ -6,6 +6,12 @@ export const metadata: Metadata = {
   title: 'NIX.AI - PROJECT MANAGER',
   description: 'Nền tảng quản lý dự án doanh nghiệp chuyên nghiệp',
   generator: 'v0.app',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'NIX.AI',
+  },
   icons: {
     icon: [
       {
@@ -18,9 +24,10 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: 'light dark',
+  viewportFit: 'cover',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: 'white' },
-    { media: '(prefers-color-scheme: dark)', color: 'black' },
+    { media: '(prefers-color-scheme: light)', color: '#2563eb' },
+    { media: '(prefers-color-scheme: dark)', color: '#0f172a' },
   ],
 }
 

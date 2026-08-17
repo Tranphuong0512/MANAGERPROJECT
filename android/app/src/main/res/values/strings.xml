@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">NIX.AI - PROJECT MANAGER</string>
+    <string name="title_activity_main">NIX.AI - PROJECT MANAGER</string>
+    <string name="package_name">ai.nix.projectmanager</string>
+    <string name="custom_url_scheme">ai.nix.projectmanager</string>
+</resources>
