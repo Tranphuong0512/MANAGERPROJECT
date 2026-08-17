@@ -9,6 +9,7 @@ import { TASK_STATUS_LABELS, TASK_STATUS_COLORS, PRIORITY_COLORS } from '@/lib/c
 import { CreateTaskDialog } from '@/components/tasks/create-task-dialog'
 import { customAlert, customConfirm } from '@/utils/alert'
 import { usePermissions } from '@/hooks/usePermissions'
+import { formatVietnamDate } from '@/lib/utils'
 
 interface Task {
   id: string
@@ -205,11 +206,15 @@ export default function ProjectTasksPage() {
                         >
                           {task.priority?.charAt(0).toUpperCase() + task.priority?.slice(1)}
                         </span>
-                        {task.due_date && (
-                          <span className="text-xs text-slate-600 bg-slate-200 px-2 py-1 rounded">
-                            {new Date(task.due_date).toLocaleDateString()}
-                          </span>
-                        )}
+                        {(() => {
+                          const dueDate = task.due_date || (task as any).end_date || (task as any).date_end || (task as any).completed_date;
+                          if (!dueDate) return null;
+                          return (
+                            <span className="text-xs text-slate-600 bg-slate-200 px-2 py-1 rounded">
+                              Hạn: {formatVietnamDate(dueDate)}
+                            </span>
+                          );
+                        })()}
                         {task.assigned_user?.full_name && (
                           <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100 flex items-center gap-1">
                             <span className="w-2 h-2 rounded-full bg-blue-300 inline-block"></span>
@@ -252,11 +257,15 @@ export default function ProjectTasksPage() {
                         >
                           {task.priority?.charAt(0).toUpperCase() + task.priority?.slice(1)}
                         </span>
-                        {task.due_date && (
-                          <span className="text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded">
-                            Due: {new Date(task.due_date).toLocaleDateString()}
-                          </span>
-                        )}
+                        {(() => {
+                          const dueDate = task.due_date || (task as any).end_date || (task as any).date_end || (task as any).completed_date;
+                          if (!dueDate) return null;
+                          return (
+                            <span className="text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded">
+                              Hạn: {formatVietnamDate(dueDate)}
+                            </span>
+                          );
+                        })()}
                         {task.assigned_user?.full_name && (
                           <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100 flex items-center gap-1">
                             <span className="w-3 h-3 rounded-full bg-blue-200 inline-block"></span>

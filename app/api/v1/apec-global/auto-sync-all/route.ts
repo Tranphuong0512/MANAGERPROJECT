@@ -317,6 +317,21 @@ export async function POST(request: NextRequest) {
 
       const priorityName = typeof t.priority === 'object' ? String(t.priority?.name || '') : String(t.priority || '');
 
+      // Trích xuất hạn chót & ngày bắt đầu toàn diện từ mọi nguồn APEC
+      let taskDueDate = t.date_end || t.end_date || t.due_date || t.completed_date || t.finish_date || null;
+      let taskStartDate = t.date_start || t.start_date || t.created_at || null;
+
+      if (Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
+        for (const eaItem of t.employee_assignments) {
+          if (!taskDueDate && (eaItem.completed_date || eaItem.date_end || eaItem.end_date || eaItem.due_date)) {
+            taskDueDate = eaItem.completed_date || eaItem.date_end || eaItem.end_date || eaItem.due_date;
+          }
+          if (!taskStartDate && (eaItem.date_start || eaItem.start_date)) {
+            taskStartDate = eaItem.date_start || eaItem.start_date;
+          }
+        }
+      }
+
       const taskPayload = {
         project_id: targetProjectId,
         title,
@@ -324,7 +339,8 @@ export async function POST(request: NextRequest) {
         status: resolvedStatus,
         priority: (priorityName.toLowerCase().includes('cao') ? 'high' : 'medium') as any,
         progress_percentage: avgProgress,
-        due_date: t.due_date || t.end_date || null,
+        start_date: taskStartDate,
+        due_date: taskDueDate,
         assigned_to: assignedStaffUuid && !assignedStaffUuid.startsWith('apec_') ? assignedStaffUuid : null,
       };
 
@@ -343,8 +359,9 @@ export async function POST(request: NextRequest) {
           status: resolvedStatus,
           is_completed: isDone,
           progress: avgProgress,
-          start_date: t.date_start || t.start_date || null,
-          end_date: t.date_end || t.end_date || t.due_date || null,
+          start_date: taskStartDate,
+          end_date: taskDueDate,
+          due_date: taskDueDate,
           assigned_staff_id: assignedStaffUuid && !assignedStaffUuid.startsWith('apec_') ? assignedStaffUuid : null,
           assignee_ids: performerUuids.filter(u => !u.startsWith('apec_')),
         };

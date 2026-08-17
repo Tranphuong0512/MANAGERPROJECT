@@ -281,7 +281,7 @@ export function ProjectChecklistAccordion({ projectId, organizationId, onProgres
                             <div className="flex items-center gap-1">
                               <input 
                                 type="date"
-                                value={formatDateForInput(item.start_date)}
+                                value={formatDateForInput(item.start_date || item.date_start || item.created_at)}
                                 onChange={(e) => updateItemDate(item, 'start_date', e.target.value)}
                                 className="bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-slate-600 cursor-pointer focus:outline-none focus:border-blue-400"
                                 title="Ngày bắt đầu"
@@ -289,10 +289,10 @@ export function ProjectChecklistAccordion({ projectId, organizationId, onProgres
                               <span className="text-slate-400">-</span>
                               <input 
                                 type="date"
-                                value={formatDateForInput(item.end_date)}
+                                value={formatDateForInput(item.end_date || item.date_end || item.due_date || item.completed_date)}
                                 onChange={(e) => updateItemDate(item, 'end_date', e.target.value)}
                                 className="bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-slate-600 cursor-pointer focus:outline-none focus:border-blue-400"
-                                title="Ngày kết thúc"
+                                title="Ngày kết thúc / Hạn chót"
                               />
                             </div>
                           </div>

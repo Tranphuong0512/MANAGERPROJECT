@@ -513,6 +513,9 @@ export async function GET(
                   stStatusObj = { id: 1, name: 'Chưa thực hiện' };
                 }
 
+                const subDueDate = st.completed_date || st.date_end || st.end_date || st.due_date || assign.completed_date || t.date_end || null;
+                const subStartDate = st.date_start || st.start_date || assign.date_start || t.date_start || null;
+
                 extractedSubtasks.push({
                   ...st,
                   id: st.id,
@@ -523,7 +526,12 @@ export async function GET(
                   progress: stProc,
                   status: stStatusObj,
                   employee: assign.hydrated_employee,
-                  completed_date: st.completed_date || st.end_date || st.due_date || assign.completed_date || null,
+                  completed_date: subDueDate,
+                  end_date: subDueDate,
+                  due_date: subDueDate,
+                  date_end: subDueDate,
+                  start_date: subStartDate,
+                  date_start: subStartDate,
                   ea_id: assign.id
                 });
               });
@@ -569,6 +577,40 @@ export async function GET(
 
           const resolvedAssignees = hydratedAssignments.map((ha: any) => ha.hydrated_employee).filter(Boolean);
 
+          // Trích xuất hạn chót và ngày bắt đầu toàn diện từ Task, EA, Subtasks
+          let resolvedStartDate = t.date_start || t.start_date || t.created_at || null;
+          let resolvedEndDate = t.date_end || t.end_date || t.due_date || t.completed_date || t.finish_date || t.target_date || null;
+
+          if (!resolvedEndDate && Array.isArray(hydratedAssignments) && hydratedAssignments.length > 0) {
+            for (const ha of hydratedAssignments) {
+              const d = ha.completed_date || ha.date_end || ha.end_date || ha.due_date;
+              if (d) {
+                resolvedEndDate = d;
+                break;
+              }
+            }
+          }
+
+          if (!resolvedEndDate && Array.isArray(finalSubtasks) && finalSubtasks.length > 0) {
+            for (const st of finalSubtasks) {
+              const d = st.completed_date || st.date_end || st.end_date || st.due_date;
+              if (d) {
+                resolvedEndDate = d;
+                break;
+              }
+            }
+          }
+
+          if (!resolvedStartDate && Array.isArray(hydratedAssignments) && hydratedAssignments.length > 0) {
+            for (const ha of hydratedAssignments) {
+              const d = ha.date_start || ha.start_date;
+              if (d) {
+                resolvedStartDate = d;
+                break;
+              }
+            }
+          }
+
           const taskNode = {
             id: `apec_${t.id}`,
             raw_id: t.id,
@@ -582,8 +624,12 @@ export async function GET(
             progress: avgProgress,
             target_value: Number(t.target_value || 100),
             kpi_item_id: Number(t.kpi_item?.id || t.kpi_item_id || 47),
-            start_date: t.date_start || null,
-            end_date: t.date_end || t.due_date || null,
+            start_date: resolvedStartDate,
+            end_date: resolvedEndDate,
+            due_date: resolvedEndDate,
+            date_end: resolvedEndDate,
+            date_start: resolvedStartDate,
+            completed_date: resolvedEndDate,
             is_completed: isApecDone || isApprovedByBoss, // Hoàn thành khi server APEC đã xong hoặc sếp đã duyệt
             assignees: resolvedAssignees,
             sort_order: 0,

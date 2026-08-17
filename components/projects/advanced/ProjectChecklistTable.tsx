@@ -321,18 +321,24 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
 
         {/* Hạn hoàn thành (ngày giờ) có thể chọn date cập nhật server Apec Global */}
         <div className="w-28 shrink-0">
-          <input
-            type="date"
-            disabled={!canEditTask}
-            value={item.end_date ? String(item.end_date).split('T')[0] : ''}
-            onChange={(e) => {
-              e.stopPropagation();
-              onDateChange(item, e.target.value);
-            }}
-            onClick={(e) => e.stopPropagation()}
-            className={`px-1.5 py-1 text-xs font-medium text-slate-700 bg-transparent rounded transition-all outline-none border border-transparent ${!canEditTask ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-slate-100 hover:border-slate-300'}`}
-            title={canEditTask ? "Thao tác ngày giờ cập nhật lên server Apec Global" : "Không có quyền sửa đổi"}
-          />
+          {(() => {
+            const itemDueDate = item.end_date || item.date_end || item.due_date || item.completed_date || (Array.isArray(item.employee_assignments) && item.employee_assignments.find((ea: any) => ea.completed_date || ea.end_date || ea.date_end)?.completed_date) || '';
+            const valStr = itemDueDate ? String(itemDueDate).split('T')[0] : '';
+            return (
+              <input
+                type="date"
+                disabled={!canEditTask}
+                value={valStr}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  onDateChange(item, e.target.value);
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className={`px-1.5 py-1 text-xs font-medium text-slate-700 bg-transparent rounded transition-all outline-none border border-transparent ${!canEditTask ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-slate-100 hover:border-slate-300'}`}
+                title={canEditTask ? "Thao tác ngày giờ cập nhật lên server Apec Global" : "Không có quyền sửa đổi"}
+              />
+            );
+          })()}
         </div>
 
         <div className="w-24 flex-shrink-0">
@@ -572,14 +578,20 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
 
                   {/* Hạn hoàn thành editable */}
                   <div className="w-28 shrink-0">
-                    <input
-                      type="date"
-                      disabled={!canEditTask}
-                      value={sub.completed_date || sub.end_date || sub.due_date ? String(sub.completed_date || sub.end_date || sub.due_date).split('T')[0] : ''}
-                      onChange={(e) => onSubtaskChange?.(item, idx, { completed_date: e.target.value, end_date: e.target.value })}
-                      className={`px-1.5 py-0.5 text-xs font-medium text-slate-700 bg-transparent rounded transition-all outline-none border border-transparent ${!canEditTask ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-slate-100 hover:border-slate-300'}`}
-                      title={canEditTask ? "Cập nhật hạn hoàn thành công việc con lên Apec Global" : "Không có quyền sửa đổi"}
-                    />
+                    {(() => {
+                      const subDueDate = sub.completed_date || sub.date_end || sub.end_date || sub.due_date || item.end_date || item.date_end || item.due_date || '';
+                      const valStr = subDueDate ? String(subDueDate).split('T')[0] : '';
+                      return (
+                        <input
+                          type="date"
+                          disabled={!canEditTask}
+                          value={valStr}
+                          onChange={(e) => onSubtaskChange?.(item, idx, { completed_date: e.target.value, end_date: e.target.value, date_end: e.target.value, due_date: e.target.value })}
+                          className={`px-1.5 py-0.5 text-xs font-medium text-slate-700 bg-transparent rounded transition-all outline-none border border-transparent ${!canEditTask ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-slate-100 hover:border-slate-300'}`}
+                          title={canEditTask ? "Cập nhật hạn hoàn thành công việc con lên Apec Global" : "Không có quyền sửa đổi"}
+                        />
+                      );
+                    })()}
                   </div>
 
                   {/* Trạng thái editable - đọc chính xác từ APEC Global */}

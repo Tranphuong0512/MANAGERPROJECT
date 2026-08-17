@@ -473,6 +473,10 @@ export default function DashboardPage() {
             deptName = 'Chung / Chưa phân loại';
           }
 
+          // Trích xuất ngày bắt đầu và hạn chót toàn diện
+          const taskStartDate = t.start_date || t.date_start || t.created_at || null;
+          const taskDueDate = t.due_date || t.end_date || t.date_end || t.finish_date || t.completed_date || t.target_date || null;
+
           return {
             id: t.id,
             raw_id: t.id,
@@ -482,8 +486,8 @@ export default function DashboardPage() {
             department_id: deptId,
             department_name: deptName,
             assignee: assigneeObj,
-            start_date: t.start_date || t.created_at || null,
-            due_date: t.due_date || null,
+            start_date: taskStartDate,
+            due_date: taskDueDate,
             progress: progressVal,
             status: (isDone ? 'done' : (isReview ? 'review' : (t.status === 'in_progress' ? 'in_progress' : (t.status === 'blocked' ? 'blocked' : 'todo')))) as any,
             priority: (t.priority || 'medium') as any,
@@ -572,6 +576,10 @@ export default function DashboardPage() {
               deptName = 'Chung / Chưa phân loại';
             }
 
+            // Trích xuất ngày bắt đầu và hạn chót
+            const ciStartDate = t.start_date || t.date_start || t.created_at || null;
+            const ciDueDate = t.end_date || t.due_date || t.date_end || t.completed_date || t.finish_date || null;
+
             return {
               id: t.id,
               raw_id: t.id,
@@ -581,8 +589,8 @@ export default function DashboardPage() {
               department_id: deptId,
               department_name: deptName,
               assignee: assigneeObj,
-              start_date: t.start_date || t.created_at || null,
-              due_date: t.end_date || t.due_date || null,
+              start_date: ciStartDate,
+              due_date: ciDueDate,
               progress: progressVal,
               status: (isDone ? 'done' : (isReview ? 'review' : (rawSt === 'in_progress' ? 'in_progress' : 'todo'))) as any,
               priority: (t.priority || 'medium') as any,
@@ -693,19 +701,29 @@ export default function DashboardPage() {
               deptName = 'Chung / Chưa phân loại';
             }
 
-            // Trích xuất thời gian hạn chót đầy đủ
-            let startDate = t.start_date || t.created_at || null;
-            let dueDate = t.due_date || t.end_date || t.finish_date || t.target_date || t.completed_date || null;
+            // Trích xuất thời gian hạn chót & ngày bắt đầu đầy đủ từ mọi trường APEC
+            let startDate = t.date_start || t.start_date || t.created_at || null;
+            let dueDate = t.date_end || t.end_date || t.due_date || t.completed_date || t.finish_date || t.target_date || null;
 
-            if (!dueDate && Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
-              const firstEa = t.employee_assignments[0];
-              dueDate = firstEa.completed_date || firstEa.end_date || firstEa.due_date || null;
-              if (!startDate && firstEa.start_date) startDate = firstEa.start_date;
+            if (Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
+              for (const ea of t.employee_assignments) {
+                if (!dueDate && (ea.completed_date || ea.date_end || ea.end_date || ea.due_date)) {
+                  dueDate = ea.completed_date || ea.date_end || ea.end_date || ea.due_date;
+                }
+                if (!startDate && (ea.date_start || ea.start_date)) {
+                  startDate = ea.date_start || ea.start_date;
+                }
+              }
             }
 
             if (!dueDate && Array.isArray(t.subtasks) && t.subtasks.length > 0) {
-              const firstSub = t.subtasks[0];
-              dueDate = firstSub.due_date || firstSub.end_date || null;
+              for (const sub of t.subtasks) {
+                const subDate = sub.date_end || sub.end_date || sub.due_date || sub.completed_date;
+                if (subDate) {
+                  dueDate = subDate;
+                  break;
+                }
+              }
             }
 
             return {
