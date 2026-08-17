@@ -300,10 +300,16 @@ export async function POST(request: NextRequest) {
       
       const parentProcess = Number(t.progress ?? t.process ?? 0);
       let avgProgress = parentProcess;
+      const allEasDone = ea.length > 0 && ea.every((assign: any) => Number(assign.process ?? assign.progress ?? 0) >= 100 || assign.checked);
+
       if (ea.length > 0) {
         totalSubtasks += ea.length;
-        const sum = ea.reduce((acc: number, cur: any) => acc + (Number(cur.process || cur.progress) || 0), 0);
+        const sum = ea.reduce((acc: number, cur: any) => acc + (Number(cur.process || cur.progress) || (cur.checked ? 100 : 0)), 0);
         avgProgress = Math.max(parentProcess, Math.round(sum / ea.length));
+      }
+
+      if (allEasDone && avgProgress < 100) {
+        avgProgress = 100;
       }
 
       const isApprovedByBoss = ea.length > 0 && ea.every((assign: any) => assign.checked === true);
@@ -312,7 +318,12 @@ export async function POST(request: NextRequest) {
       const statusName = typeof rawStatus === 'object' ? String(rawStatus?.name || '').toLowerCase() : (typeof t.task_status === 'object' ? String(t.task_status?.name || '').toLowerCase() : String(rawStatus || '').toLowerCase());
 
       const isDone = isApprovedByBoss || statusId === 4 || rawStatus === 'done' || rawStatus === 'completed' || rawStatus === 'resolved' || rawStatus === 'implemented' || statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || statusName.includes('da duyet') || statusName.includes('đã phê duyệt') || Boolean(t.is_completed);
-      const isReview = !isDone && (statusId === 3 || rawStatus === 'review' || rawStatus === 'in_review' || rawStatus === 'pending_approval' || statusName.includes('chờ') || statusName.includes('đợi') || statusName.includes('pending') || parentProcess >= 100 || avgProgress >= 100);
+      const isReview = !isDone && (statusId === 3 || rawStatus === 'review' || rawStatus === 'in_review' || rawStatus === 'pending_approval' || statusName.includes('chờ') || statusName.includes('đợi') || statusName.includes('pending') || parentProcess >= 100 || avgProgress >= 100 || allEasDone);
+
+      if (isReview && avgProgress < 100) {
+        avgProgress = 100;
+      }
+
       const resolvedStatus = isDone ? 'done' : (isReview ? 'review' : (avgProgress > 0 || parentProcess > 0 ? 'in_progress' : 'todo'));
 
       const priorityName = typeof t.priority === 'object' ? String(t.priority?.name || '') : String(t.priority || '');

@@ -71,9 +71,9 @@ export async function GET(
                 const statusLower = statusName.toLowerCase();
                 const ea = Array.isArray(t.employee_assignments) ? t.employee_assignments : [];
                 const isApprovedByBoss = ea.length > 0 && ea.every((assign: any) => assign.checked === true);
-
+                const allEasDone = ea.length > 0 && ea.every((assign: any) => Number(assign.process ?? assign.progress ?? 0) >= 100 || assign.checked);
                 const isDone = isApprovedByBoss || taskStatus === 4 || t.status === 'done' || t.status === 'completed' || t.status === 'resolved' || statusLower.includes('đã duyệt') || statusLower.includes('hoàn thành') || Boolean(t.is_completed);
-                const isReview = !isDone && (taskStatus === 3 || t.status === 'review' || statusLower.includes('chờ') || statusLower.includes('đợi') || statusLower.includes('pending') || Number(t.process ?? t.progress ?? 0) >= 100);
+                const isReview = !isDone && (taskStatus === 3 || t.status === 'review' || statusLower.includes('chờ') || statusLower.includes('đợi') || statusLower.includes('pending') || Number(t.process ?? t.progress ?? 0) >= 100 || allEasDone);
 
                 if (isDone) {
                   st.done += 1;

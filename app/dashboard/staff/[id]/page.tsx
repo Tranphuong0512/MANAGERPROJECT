@@ -348,8 +348,15 @@ export default function StaffDetailPage() {
                   ? Math.round(subtasks.reduce((acc, st) => acc + st.process, 0) / subtasks.length)
                   : 0;
 
+                const allSubtasksDone = subtasks.length > 0 && subtasks.every(st => st.process >= 100 || st.checked);
+                const isAllEasDone = userEAs.length > 0 && userEAs.every((a: any) => Number(a.process ?? a.progress ?? 0) >= 100 || a.checked);
+                const hasSubtasksDone100 = allSubtasksDone || isAllEasDone;
+
                 // Tiến độ hiển thị: lấy max để hiển thị trên thanh progress
-                const progressVal = Math.max(taskLevelProcess, eaProgress, subtaskAvgProgress);
+                let progressVal = Math.max(taskLevelProcess, eaProgress, subtaskAvgProgress);
+                if (hasSubtasksDone100 && progressVal < 100) {
+                  progressVal = 100;
+                }
 
                 const abandonedTypes = ['HẰNG NGÀY', 'CHUNG', 'CÁ NHÂN'];
                 let checklistType = (typeof t.type === 'object' ? t.type?.name : t.type_name) || 'NHẬT KÝ CHUYÊN MÔN';
@@ -360,18 +367,17 @@ export default function StaffDetailPage() {
 
                 // BỘ QUY TẮC HIỂN THỊ TRẠNG THÁI & XÉT DUYỆT CÔNG VIỆC:
                 // 1. checked === true (trong mọi EA) → "Đã duyệt" ('done') — CHỈ khi sếp tích duyệt
-                // 2. checked === false & t.process (task-level) >= 100 → "Chờ duyệt" ('review')
-                //    Ví dụ: "Tinh chỉnh web POS" (t.process=100, checked=false) → review
-                // 3. checked === false & t.process < 100 → "Đang thực hiện" ('in_progress')
-                //    Ví dụ: "Tool gửi ZNS" (t.process=0, ea.process=100, subtasks 100%) → in_progress
+                // 2. checked === false & (t.process >= 100 HOẶC các công việc con đạt 100%) → "Chờ duyệt" ('review')
+                // 3. Tiến độ > 0% → "Đang thực hiện" ('in_progress')
                 // 4. Chưa có tiến độ → "Chưa làm" ('todo')
                 let resolvedStatus = 'todo';
                 if (isApprovedByBoss) {
                   resolvedStatus = 'done'; // Sếp đã tích checked = true → Đã duyệt
-                } else if (taskLevelProcess >= 100) {
-                  resolvedStatus = 'review'; // t.process đạt 100% nhưng checked = false → Chờ duyệt
+                } else if (taskLevelProcess >= 100 || progressVal >= 100 || hasSubtasksDone100) {
+                  resolvedStatus = 'review'; // t.process đạt 100% hoặc subtasks 100% nhưng chưa duyệt → Chờ duyệt
+                  progressVal = 100;
                 } else if (progressVal > 0 || eaProgress > 0) {
-                  resolvedStatus = 'in_progress'; // Đang thực hiện (kể cả EA/subtasks 100% nhưng t.process < 100)
+                  resolvedStatus = 'in_progress'; // Đang thực hiện
                 } else {
                   resolvedStatus = 'todo';
                 }

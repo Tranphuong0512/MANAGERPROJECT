@@ -1833,18 +1833,23 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
                 const items = list.checklist_items || []
                 let completedCount = 0, inProgressCount = 0, reviewCount = 0, todoCount = 0
                 items.forEach((i: any) => {
+                  const subs = Array.isArray(i.employee_assignments) ? i.employee_assignments : [];
+                  const isApprovedByBoss = subs.length > 0 && subs.every((a: any) => Boolean(a.checked));
+                  const allSubs100 = subs.length > 0 && subs.every((a: any) => Number(a.process ?? a.progress ?? 0) >= 100 || a.checked);
+                  const prog = Number(i.progress ?? i.process ?? 0);
+
                   const st = typeof i.status === 'object' ? i.status?.name || i.status?.id : i.status;
                   const taskSt = i.task_status?.id || i.task_status;
                   const stStr = String(st || '').toLowerCase().trim();
                   
-                  const isDone = Boolean(i.is_completed) || st === 'done' || st === 'completed' || taskSt === 4 || st === 4 || stStr.includes('hoàn thành') || stStr.includes('đã duyệt') || stStr.includes('da duyet') || stStr.includes('đã phê duyệt');
-                  const isReview = !isDone && (st === 'review' || taskSt === 3 || st === 3 || stStr.includes('chờ') || stStr.includes('đợi') || stStr.includes('pending'));
+                  const isDone = isApprovedByBoss || Boolean(i.is_completed) || st === 'done' || st === 'completed' || taskSt === 4 || st === 4 || stStr.includes('hoàn thành') || stStr.includes('đã duyệt') || stStr.includes('da duyet') || stStr.includes('đã phê duyệt');
+                  const isReview = !isDone && (st === 'review' || taskSt === 3 || st === 3 || stStr.includes('chờ') || stStr.includes('đợi') || stStr.includes('pending') || prog >= 100 || allSubs100);
 
                   if (isDone) {
                     completedCount++;
                   } else if (isReview) {
                     reviewCount++;
-                  } else if (st === 'in_progress' || taskSt === 2) {
+                  } else if (st === 'in_progress' || taskSt === 2 || prog > 0) {
                     inProgressCount++;
                   } else {
                     todoCount++;
@@ -2037,17 +2042,22 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
                   {list.departments.map((dept: any) => {
                     const isDeptExpanded = expandedDepartments[`${list.id}_${dept.id}`] ?? false;
                     const isTaskDone = (i: any) => {
+                      const subs = Array.isArray(i.employee_assignments) ? i.employee_assignments : [];
+                      const isApprovedByBoss = subs.length > 0 && subs.every((a: any) => Boolean(a.checked));
                       const st = typeof i.status === 'object' ? i.status?.name || i.status?.id : i.status;
                       const taskSt = i.task_status?.id || i.task_status;
                       const stStr = String(st || '').toLowerCase().trim();
-                      return Boolean(i.is_completed) || st === 'done' || st === 'completed' || taskSt === 4 || st === 4 || stStr.includes('hoàn thành') || stStr.includes('đã duyệt') || stStr.includes('da duyet') || stStr.includes('đã phê duyệt');
+                      return isApprovedByBoss || Boolean(i.is_completed) || st === 'done' || st === 'completed' || taskSt === 4 || st === 4 || stStr.includes('hoàn thành') || stStr.includes('đã duyệt') || stStr.includes('da duyet') || stStr.includes('đã phê duyệt');
                     };
                     const isTaskReview = (i: any) => {
                       if (isTaskDone(i)) return false;
+                      const subs = Array.isArray(i.employee_assignments) ? i.employee_assignments : [];
+                      const allSubs100 = subs.length > 0 && subs.every((a: any) => Number(a.process ?? a.progress ?? 0) >= 100 || a.checked);
+                      const prog = Number(i.progress ?? i.process ?? 0);
                       const st = typeof i.status === 'object' ? i.status?.name || i.status?.id : i.status;
                       const taskSt = i.task_status?.id || i.task_status;
                       const stStr = String(st || '').toLowerCase().trim();
-                      return st === 'review' || taskSt === 3 || st === 3 || stStr.includes('chờ') || stStr.includes('đợi') || stStr.includes('pending');
+                      return st === 'review' || taskSt === 3 || st === 3 || stStr.includes('chờ') || stStr.includes('đợi') || stStr.includes('pending') || prog >= 100 || allSubs100;
                     };
 
                     const totalCount = dept.items.length;

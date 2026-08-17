@@ -540,35 +540,45 @@ export async function GET(
 
           const finalSubtasks = extractedSubtasks;
 
-          // Quy tắc xét duyệt công việc (dựa trên dữ liệu thực tế APEC Global API):
-          // - EA.checked === true  → "Đã duyệt" (done) — CHỈ KHI SẾP TÍCH DUYỆT
-          // - checked === false & t.process (task-level) >= 100 → "Chờ duyệt" (review)
-          //   Ví dụ: "Tinh chỉnh web POS" (t.process=100, checked=false) → review
-          // - checked === false & t.process < 100 → "Đang thực hiện" (in_progress)
-          //   Ví dụ: "Tool gửi ZNS" (t.process=0, ea.process=100, subtasks 100%) → in_progress
-          // - process === 0 → "Chưa làm" (todo)
+          // Quy tắc xét duyệt công việc:
+          // 1. Sếp đã duyệt (EA.checked === true trên tất cả phân công) HOẶC server APEC báo đã duyệt/hoàn thành → "Đã duyệt" (done)
+          // 2. Chưa duyệt & (t.process >= 100 HOẶC tất cả EA/Subtasks đều đạt 100% HOẶC status là review) → "Chờ duyệt" (review)
+          // 3. Tiến độ > 0% → "Đang thực hiện" (in_progress)
+          // 4. Tiến độ === 0% → "Chưa làm" (todo)
           const isApprovedByBoss = ea.length > 0 && ea.every((assign: any) => assign.checked === true);
           const parentProcess = Number(t.process ?? t.progress ?? 0);
           const taskStatusId = Number(t.status?.id || t.task_status?.id || t.status);
           const statusName = String(t.status?.name || t.status || '').toLowerCase();
           const isApecDone = taskStatusId === 4 || t.status === 'done' || t.status === 'completed' || t.status === 'resolved' || t.status === 'implemented' || statusName.includes('hoàn thành') || statusName.includes('đã duyệt') || Boolean(t.is_completed);
           
-          // Tính tiến độ hiển thị: lấy max giữa process cha và trung bình EA process
-          let avgProgress = parentProcess;
+          // Tính tiến độ EA (Phân công nhân sự) & Subtasks
+          let eaAvg = 0;
           if (ea.length > 0) {
-            const sum = ea.reduce((acc: number, cur: any) => acc + (Number(cur.process ?? cur.progress) || 0), 0);
-            avgProgress = Math.max(parentProcess, Math.round(sum / ea.length));
+            const sum = ea.reduce((acc: number, cur: any) => acc + (Number(cur.process ?? cur.progress) || (cur.checked ? 100 : 0)), 0);
+            eaAvg = Math.round(sum / ea.length);
           }
+          let subAvg = 0;
           if (finalSubtasks.length > 0) {
-            const subAvg = Math.round(finalSubtasks.reduce((a: number, b: any) => a + (b.process || 0), 0) / finalSubtasks.length);
-            avgProgress = Math.max(avgProgress, subAvg);
+            const sum = finalSubtasks.reduce((acc: number, cur: any) => acc + (Number(cur.process ?? cur.progress) || (cur.checked ? 100 : 0)), 0);
+            subAvg = Math.round(sum / finalSubtasks.length);
+          }
+
+          // Kiểm tra xem tất cả công việc con / phân công nhân sự đã xong 100% chưa
+          const allEasDone = ea.length > 0 && ea.every((assign: any) => Number(assign.process ?? assign.progress ?? 0) >= 100 || assign.checked);
+          const allSubsDone = finalSubtasks.length > 0 && finalSubtasks.every((st: any) => Number(st.process ?? st.progress ?? 0) >= 100 || st.checked);
+          const hasChildrenDone100 = allEasDone || allSubsDone;
+
+          let avgProgress = Math.max(parentProcess, eaAvg, subAvg);
+          if (hasChildrenDone100 && avgProgress < 100) {
+            avgProgress = 100;
           }
 
           let taskStatus = 'todo';
           if (isApecDone || isApprovedByBoss) {
-            taskStatus = 'done'; // Sếp đã tích checked = true HOẶC server APEC đã duyệt
-          } else if (taskStatusId === 3 || statusName.includes('chờ duyệt') || statusName === 'review' || parentProcess >= 100 || avgProgress >= 100) {
-            taskStatus = 'review'; // t.process (task-level) đạt 100% hoặc status = 3 nhưng sếp chưa duyệt → Chờ duyệt
+            taskStatus = 'done'; // Sếp đã duyệt HOẶC server APEC đã duyệt
+          } else if (taskStatusId === 3 || statusName.includes('chờ duyệt') || statusName === 'review' || statusName.includes('chờ') || parentProcess >= 100 || avgProgress >= 100 || hasChildrenDone100) {
+            taskStatus = 'review'; // Công việc con hoặc tiến độ cha đạt 100% nhưng chưa duyệt → Chờ duyệt
+            avgProgress = 100; // Khi chờ duyệt hiển thị 100%
           } else if (avgProgress > 0 || parentProcess > 0 || taskStatusId === 2 || statusName.includes('đang')) {
             taskStatus = 'in_progress'; // Đang thực hiện
           } else {
