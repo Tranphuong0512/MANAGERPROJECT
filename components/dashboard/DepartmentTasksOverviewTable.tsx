@@ -80,11 +80,55 @@ export function DepartmentTasksOverviewTable({
     setTasks(initialTasks)
   }, [initialTasks])
 
-  // Trích xuất danh sách phòng ban duy nhất từ tasks + departments prop
+  // Helper: Kiểm tra khớp phòng ban
+  const isMatchDept = (t: TaskOverviewItem, deptVal: string) => {
+    if (deptVal === 'all') return true;
+    const targetDeptKey = deptVal.trim().toLowerCase();
+    const tDeptName = (t.department_name || 'Chung / Chưa phân loại').trim().toLowerCase();
+    const selectedDeptObj = departments.find(d => String(d.id) === String(deptVal) || d.name.trim().toLowerCase() === targetDeptKey);
+    const targetName = selectedDeptObj ? selectedDeptObj.name.trim().toLowerCase() : targetDeptKey;
+    const matchesName = tDeptName === targetName || tDeptName === targetDeptKey;
+    const matchesId = t.department_id && String(t.department_id) === String(deptVal);
+    return Boolean(matchesName || matchesId);
+  };
+
+  // Helper: Kiểm tra khớp dự án
+  const isMatchProj = (t: TaskOverviewItem, projVal: string) => {
+    if (projVal === 'all') return true;
+    const targetProjKey = projVal.trim().toLowerCase();
+    const tProjId = String(t.project_id || '').toLowerCase();
+    const tProjName = (t.project_name || '').trim().toLowerCase();
+    const selectedProjObj = projects.find(p => String(p.id) === String(projVal) || p.name.trim().toLowerCase() === targetProjKey);
+    const targetName = selectedProjObj ? selectedProjObj.name.trim().toLowerCase() : targetProjKey;
+    const matchesId = tProjId === targetProjKey || (selectedProjObj && tProjId === String(selectedProjObj.id).toLowerCase());
+    const matchesName = tProjName === targetName || tProjName === targetProjKey;
+    return Boolean(matchesId || matchesName);
+  };
+
+  // Helper: Kiểm tra khớp từ khóa
+  const isMatchSearchQuery = (t: TaskOverviewItem, query: string) => {
+    if (!query.trim()) return true;
+    const q = query.toLowerCase().trim();
+    const matchTitle = t.title?.toLowerCase().includes(q);
+    const matchProject = t.project_name?.toLowerCase().includes(q);
+    const matchDept = t.department_name?.toLowerCase().includes(q);
+    const matchAssignee = t.assignee?.full_name?.toLowerCase().includes(q);
+    return Boolean(matchTitle || matchProject || matchDept || matchAssignee);
+  };
+
+  // Helper: Kiểm tra khớp trạng thái dropdown
+  const isMatchDropdownStatus = (t: TaskOverviewItem, statusVal: string) => {
+    if (statusVal === 'all') return true;
+    const now = new Date();
+    if (statusVal === 'review') return t.status === 'review';
+    if (statusVal === 'overdue') return Boolean(t.due_date && t.status !== 'done' && t.status !== 'review' && new Date(t.due_date) < now);
+    if (statusVal === 'done') return t.status === 'done';
+    return t.status === statusVal;
+  };
+
+  // Trích xuất danh sách phòng ban động (phản ánh theo dự án & tìm kiếm đang chọn)
   const departmentOptions = useMemo(() => {
     const map = new Map<string, { id: string; name: string; count: number }>()
-    
-    // Khởi tạo từ danh sách departments
     departments.forEach(d => {
       if (d && d.name) {
         const key = d.name.trim().toLowerCase()
@@ -92,8 +136,11 @@ export function DepartmentTasksOverviewTable({
       }
     })
 
-    // Đếm số task theo từng phòng ban
+    // Đếm số task theo từng phòng ban trong phạm vi bộ lọc Dự án & Tìm kiếm
     tasks.forEach(t => {
+      if (!isMatchProj(t, selectedProject) || !isMatchSearchQuery(t, searchQuery) || !isMatchDropdownStatus(t, selectedStatus)) {
+        return
+      }
       const deptName = t.department_name ? t.department_name.trim() : 'Chung / Chưa phân loại'
       const key = deptName.toLowerCase()
       const existing = map.get(key)
@@ -105,9 +152,9 @@ export function DepartmentTasksOverviewTable({
     })
 
     return Array.from(map.values()).sort((a, b) => b.count - a.count)
-  }, [departments, tasks])
+  }, [departments, tasks, selectedProject, searchQuery, selectedStatus, projects])
 
-  // Trích xuất danh sách dự án
+  // Trích xuất danh sách dự án động (phản ánh theo phòng ban & tìm kiếm đang chọn)
   const projectOptions = useMemo(() => {
     const map = new Map<string, { id: string; name: string; count: number }>()
     projects.forEach(p => {
@@ -115,7 +162,11 @@ export function DepartmentTasksOverviewTable({
         map.set(String(p.id), { id: String(p.id), name: p.name, count: 0 })
       }
     })
+
     tasks.forEach(t => {
+      if (!isMatchDept(t, selectedDepartment) || !isMatchSearchQuery(t, searchQuery) || !isMatchDropdownStatus(t, selectedStatus)) {
+        return
+      }
       const pId = String(t.project_id || '')
       const pName = t.project_name || 'Dự án'
       if (pId) {
@@ -125,9 +176,9 @@ export function DepartmentTasksOverviewTable({
       }
     })
     return Array.from(map.values()).sort((a, b) => b.count - a.count)
-  }, [projects, tasks])
+  }, [projects, tasks, selectedDepartment, searchQuery, selectedStatus, departments])
 
-  // Thống kê nhanh theo trạng thái
+  // Thống kê nhanh theo trạng thái TRONG PHẠM VI BỘ LỌC ĐANG CHỌN (Phòng ban, Dự án, Tìm kiếm)
   const stats = useMemo(() => {
     const now = new Date()
     let reviewCount = 0
@@ -135,8 +186,16 @@ export function DepartmentTasksOverviewTable({
     let doneCount = 0
     let todoCount = 0
     let overdueCount = 0
+    let totalCount = 0
 
     tasks.forEach(t => {
+      // Áp dụng bộ lọc ngữ cảnh: Phòng ban, Dự án, Tìm kiếm, Dropdown trạng thái
+      if (!isMatchDept(t, selectedDepartment)) return
+      if (!isMatchProj(t, selectedProject)) return
+      if (!isMatchSearchQuery(t, searchQuery)) return
+      if (!isMatchDropdownStatus(t, selectedStatus)) return
+
+      totalCount++
       if (t.status === 'review') {
         reviewCount++
       } else if (t.status === 'done') {
@@ -155,20 +214,29 @@ export function DepartmentTasksOverviewTable({
     })
 
     return {
-      total: tasks.length,
+      total: totalCount,
       review: reviewCount,
       inProgress: inProgressCount,
       done: doneCount,
       todo: todoCount,
       overdue: overdueCount,
     }
-  }, [tasks])
+  }, [tasks, selectedDepartment, selectedProject, searchQuery, selectedStatus, departments, projects])
 
   // Lọc danh sách công việc
   const filteredTasks = useMemo(() => {
     const now = new Date()
     return tasks.filter(t => {
-      // 1. Lọc theo Tab nhanh
+      // 1. Khớp phòng ban
+      if (!isMatchDept(t, selectedDepartment)) return false
+
+      // 2. Khớp dự án
+      if (!isMatchProj(t, selectedProject)) return false
+
+      // 3. Khớp từ khóa tìm kiếm
+      if (!isMatchSearchQuery(t, searchQuery)) return false
+
+      // 4. Lọc theo Tab nhanh
       if (activeTab === 'review') {
         if (t.status !== 'review') return false
       } else if (activeTab === 'in_progress') {
@@ -180,38 +248,7 @@ export function DepartmentTasksOverviewTable({
         if (!isOverdue) return false
       }
 
-      // 2. Lọc theo Phòng Ban
-      if (selectedDepartment !== 'all') {
-        const targetDeptKey = selectedDepartment.trim().toLowerCase()
-        const tDeptName = (t.department_name || 'Chung / Chưa phân loại').trim().toLowerCase()
-        const selectedDeptObj = departmentOptions.find(d => String(d.id) === String(selectedDepartment) || d.name.trim().toLowerCase() === targetDeptKey)
-        const targetName = selectedDeptObj ? selectedDeptObj.name.trim().toLowerCase() : targetDeptKey
-
-        const matchesName = tDeptName === targetName || tDeptName === targetDeptKey
-        const matchesId = t.department_id && String(t.department_id) === String(selectedDepartment)
-
-        if (!matchesName && !matchesId) {
-          return false
-        }
-      }
-
-      // 3. Lọc theo Dự án
-      if (selectedProject !== 'all') {
-        const targetProjKey = selectedProject.trim().toLowerCase()
-        const tProjId = String(t.project_id || '').toLowerCase()
-        const tProjName = (t.project_name || '').trim().toLowerCase()
-        const selectedProjObj = projectOptions.find(p => String(p.id) === String(selectedProject) || p.name.trim().toLowerCase() === targetProjKey)
-        const targetName = selectedProjObj ? selectedProjObj.name.trim().toLowerCase() : targetProjKey
-
-        const matchesId = tProjId === targetProjKey || (selectedProjObj && tProjId === String(selectedProjObj.id).toLowerCase())
-        const matchesName = tProjName === targetName || tProjName === targetProjKey
-
-        if (!matchesId && !matchesName) {
-          return false
-        }
-      }
-
-      // 4. Lọc theo Trạng thái Dropdown
+      // 5. Lọc theo Trạng thái Dropdown
       if (selectedStatus !== 'all') {
         if (selectedStatus === 'review') {
           if (t.status !== 'review') return false
@@ -225,21 +262,9 @@ export function DepartmentTasksOverviewTable({
         }
       }
 
-      // 5. Lọc theo từ khóa tìm kiếm
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim()
-        const matchTitle = t.title?.toLowerCase().includes(q)
-        const matchProject = t.project_name?.toLowerCase().includes(q)
-        const matchDept = t.department_name?.toLowerCase().includes(q)
-        const matchAssignee = t.assignee?.full_name?.toLowerCase().includes(q)
-        if (!matchTitle && !matchProject && !matchDept && !matchAssignee) {
-          return false
-        }
-      }
-
       return true
     })
-  }, [tasks, activeTab, selectedDepartment, selectedProject, selectedStatus, searchQuery, departmentOptions, projectOptions])
+  }, [tasks, activeTab, selectedDepartment, selectedProject, selectedStatus, searchQuery, departments, projects])
 
   // Phân trang
   const paginatedTasks = useMemo(() => {
@@ -723,7 +748,7 @@ export function DepartmentTasksOverviewTable({
                 onChange={e => { setSelectedDepartment(e.target.value); setCurrentPage(1) }}
                 className="w-full pl-9 pr-8 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
               >
-                <option value="all">Tất cả Phòng Ban ({tasks.length})</option>
+                <option value="all">Tất cả Phòng Ban ({departmentOptions.reduce((acc, d) => acc + d.count, 0)})</option>
                 {departmentOptions.map(dept => (
                   <option key={dept.id} value={dept.name}>
                     {dept.name} ({dept.count})
@@ -745,7 +770,7 @@ export function DepartmentTasksOverviewTable({
                 onChange={e => { setSelectedProject(e.target.value); setCurrentPage(1) }}
                 className="w-full pl-9 pr-8 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
               >
-                <option value="all">Tất cả Dự Án ({tasks.length})</option>
+                <option value="all">Tất cả Dự Án ({projectOptions.reduce((acc, p) => acc + p.count, 0)})</option>
                 {projectOptions.map(proj => (
                   <option key={proj.id} value={proj.id}>
                     {proj.name} ({proj.count})
