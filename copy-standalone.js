@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env.local') });
 
 function copyRecursiveSync(src, dest) {
   const exists = fs.existsSync(src);
@@ -92,7 +93,14 @@ try {
   cleanUpFiles(standaloneDir);
 
   console.log('Standalone preparation complete!');
+
+  console.log('Building Electron app and publishing with electron-builder...');
+  execSync('npx electron-builder --win -p always', {
+    cwd: path.join(__dirname, '.next', 'standalone'),
+    stdio: 'inherit',
+    env: process.env
+  });
 } catch (err) {
-  console.error('Error copying files:', err);
+  console.error('Error during build/standalone preparation:', err);
   process.exit(1);
 }
