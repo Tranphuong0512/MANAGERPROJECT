@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { Sparkles, Download, ExternalLink, X, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { Sparkles, X, RefreshCw, CheckCircle2, ArrowRight, ShieldCheck, Zap } from 'lucide-react'
 import { showToast } from '@/utils/alert'
 
 interface UpdateInfo {
@@ -13,7 +13,6 @@ interface UpdateInfo {
   release_notes?: string
   published_at?: string
   download_url?: string
-  exe_download_url?: string
   repo_url?: string
   error?: string
 }
@@ -51,7 +50,7 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
           setIsDismissed(false)
           showToast(
             'info',
-            `🚀 Đã phát hiện phiên bản mới v${data.latest_version}. Ứng dụng đang tự động nâng cấp trong nền...`,
+            `🚀 Đã phát hiện phiên bản mới v${data.latest_version}. Hệ thống đang tự động tải và nâng cấp trong nền...`,
             'TỰ ĐỘNG NÂNG CẤP'
           )
         } else if (showNoUpdateToast) {
@@ -75,10 +74,10 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
       checkNow(false)
     }, 3000)
 
-    // Poll GitHub for releases every 5 minutes (300,000 ms)
+    // Poll GitHub for releases every 3 minutes (180,000 ms)
     const interval = setInterval(() => {
       checkNow(false)
-    }, 300000)
+    }, 180000)
 
     return () => {
       clearTimeout(timer)
@@ -94,84 +93,88 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
     <AutoUpdateContext.Provider value={{ updateInfo, isChecking, checkNow, dismissUpdate }}>
       {children}
 
-      {/* Floating Realtime Update Banner Popup */}
+      {/* Floating Realtime Automatic Update Modal / Banner */}
       {updateInfo && updateInfo.update_available && !isDismissed && (
-        <div className="fixed bottom-6 right-6 z-[999999] max-w-md w-full animate-in slide-in-from-bottom-6 duration-300 pointer-events-auto">
-          <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-950 text-white rounded-2xl p-5 shadow-2xl border-2 border-blue-500/40 backdrop-blur-xl relative overflow-hidden">
+        <div className="fixed bottom-6 right-6 z-[999999] max-w-md w-full animate-in slide-in-from-bottom-6 duration-300 pointer-events-auto shadow-2xl">
+          <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-950 text-white rounded-2xl p-5 shadow-2xl border-2 border-cyan-500/50 backdrop-blur-2xl relative overflow-hidden ring-1 ring-white/20">
             
-            {/* Background Accent Blur */}
-            <div className="absolute -top-10 -right-10 w-40 h-40 bg-blue-500/20 rounded-full blur-2xl pointer-events-none"></div>
+            {/* Ambient Background Glow */}
+            <div className="absolute -top-12 -right-12 w-48 h-48 bg-cyan-500/25 rounded-full blur-3xl pointer-events-none animate-pulse"></div>
+            <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none"></div>
 
-            <div className="flex items-start justify-between gap-3 relative z-10 mb-3">
+            <div className="flex items-start justify-between gap-3 relative z-10 mb-3.5">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-600/30 border border-blue-400/40 flex items-center justify-center flex-shrink-0 text-blue-400 animate-pulse">
-                  <Sparkles className="w-5 h-5" />
+                <div className="w-11 h-11 rounded-2xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center flex-shrink-0 text-cyan-300 shadow-lg shadow-cyan-500/20 animate-bounce">
+                  <Zap className="w-6 h-6 fill-cyan-400/30 text-cyan-300" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                      ⚡ Tự Động Nâng Cấp
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-cyan-500/25 text-cyan-200 border border-cyan-400/40 shadow-sm flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" /> TỰ ĐỘNG NÂNG CẤP
                     </span>
-                    <span className="text-xs font-bold text-emerald-400">v{updateInfo.latest_version}</span>
+                    <span className="text-xs font-extrabold text-cyan-300">v{updateInfo.latest_version}</span>
                   </div>
-                  <h4 className="font-extrabold text-base text-white mt-0.5">
-                    {updateInfo.release_name || `Đã có bản cập nhật v${updateInfo.latest_version}`}
+                  <h4 className="font-extrabold text-base text-white mt-1 leading-snug">
+                    Phát hiện phiên bản mới v{updateInfo.latest_version}
                   </h4>
                 </div>
               </div>
 
               <button
                 onClick={dismissUpdate}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-                title="Đóng"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                title="Thu nhỏ thông báo"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Release Notes */}
+            {/* Version Transition Badge */}
+            <div className="flex items-center justify-between text-xs px-3.5 py-2 rounded-xl bg-black/40 border border-white/10 mb-3.5">
+              <span className="text-slate-300 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                Hiện tại: <strong className="text-white font-semibold">v{updateInfo.current_version}</strong>
+              </span>
+              <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="text-cyan-200 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                Mới nhất: <strong className="text-cyan-300 font-bold">v{updateInfo.latest_version}</strong>
+              </span>
+            </div>
+
+            {/* Status & Automated Background Progress Notice */}
+            <div className="p-3.5 bg-gradient-to-r from-blue-900/40 to-cyan-950/40 border border-cyan-400/30 rounded-xl mb-3.5 relative overflow-hidden">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-300 shrink-0 mt-0.5">
+                  <RefreshCw className="w-4 h-4 animate-spin text-cyan-300" />
+                </div>
+                <div className="text-xs leading-relaxed space-y-1">
+                  <p className="font-bold text-cyan-200">
+                    Đang tải ngầm và tự động cài đặt bản mới...
+                  </p>
+                  <p className="text-slate-300 text-[11px]">
+                    Xin vui lòng chờ trong giây lát. Hệ thống sẽ tự động áp dụng bản nâng cấp và khởi động lại khi hoàn tất. Quý khách có thể tiếp tục làm việc bình thường.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Release Notes (if any) */}
             {updateInfo.release_notes && (
-              <div className="bg-black/30 border border-white/10 rounded-xl p-3 text-xs text-slate-300 mb-4 max-h-24 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+              <div className="bg-black/30 border border-white/10 rounded-xl p-3 text-[11px] text-slate-300 mb-3.5 max-h-20 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                <span className="font-semibold text-slate-200 block mb-1">Nội dung cập nhật:</span>
                 {updateInfo.release_notes}
               </div>
             )}
 
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-4">
-              <span>Hiện tại: <strong className="text-slate-200">v{updateInfo.current_version}</strong></span>
-              <span>Mới nhất: <strong className="text-emerald-400 font-bold">v{updateInfo.latest_version}</strong></span>
-            </div>
-
-            {/* Status & Auto Progress Notice */}
-            <div className="flex items-center justify-between gap-2 p-3 bg-blue-900/30 border border-blue-400/20 rounded-xl mb-3">
-              <div className="flex items-center gap-2 text-xs text-blue-200">
-                <RefreshCw className="w-4 h-4 animate-spin text-blue-400 shrink-0" />
-                <span>Hệ thống đang tự động tải và áp dụng bản nâng cấp...</span>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsDismissed(true)}
-                className="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                Đã hiểu (Tự động cập nhật)
-              </button>
-
-              {updateInfo.exe_download_url && (
-                <a
-                  href={updateInfo.exe_download_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white transition-colors flex items-center justify-center gap-1.5"
-                  title="Tải thủ công"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Tải EXE
-                </a>
-              )}
-            </div>
+            {/* Action Confirmation Button (Only Dismiss/Acknowledge) */}
+            <button
+              onClick={() => setIsDismissed(true)}
+              className="w-full px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-600 via-teal-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white shadow-lg shadow-cyan-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              Đã hiểu (Hệ thống tự động nâng cấp ngầm)
+            </button>
 
           </div>
         </div>
@@ -179,3 +182,4 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
     </AutoUpdateContext.Provider>
   )
 }
+

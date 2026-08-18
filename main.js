@@ -7,6 +7,7 @@ const net = require('net');
 // Disable security warnings
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 
+let mainWindow;
 let serverProcess;
 
 function getFreePort() {
@@ -95,7 +96,7 @@ async function createWindow() {
     await startNextServer(port);
     console.log(`> Server ready at http://127.0.0.1:${port}`);
 
-    const mainWindow = new BrowserWindow({
+    mainWindow = new BrowserWindow({
       width: 1280,
       height: 800,
       minWidth: 800,
@@ -112,6 +113,10 @@ async function createWindow() {
 
     mainWindow.loadURL(`http://127.0.0.1:${port}`);
 
+    mainWindow.on('closed', () => {
+      mainWindow = null;
+    });
+
     // Open DevTools in dev mode for debugging
     if (!app.isPackaged) {
       mainWindow.webContents.openDevTools();
@@ -123,27 +128,25 @@ async function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
-  createWindow();
+app.whenReady().then(async () => {
+  await createWindow();
 
   if (app.isPackaged) {
-    // Cấu hình tự động tải và nâng cấp ngầm không cần hỏi tải về
+    // Tự động tải ngầm và tự động cài đặt khi sẵn sàng
+    autoUpdater.logger = console;
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
 
-    autoUpdater.checkForUpdates().catch(err => console.warn('Initial update check failed:', err));
+    // Bắt đầu kiểm tra cập nhật ngay sau khi khởi động
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch(err => console.warn('Initial update check failed:', err));
+    }, 3000);
 
     autoUpdater.on('update-available', (info) => {
-      console.log('Update available:', info?.version);
+      console.log('Phát hiện bản cập nhật mới:', info?.version);
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('update-available', info);
       }
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'Hệ thống cập nhật tự động',
-        message: `Phát hiện phiên bản mới (v${info?.version || ''}).\nỨng dụng đang tự động tải và nâng cấp trong nền, quý khách có thể tiếp tục làm việc bình thường.`,
-        buttons: ['Đã hiểu']
-      }).catch(() => {});
     });
 
     autoUpdater.on('download-progress', (progressObj) => {
@@ -154,10 +157,13 @@ app.whenReady().then(() => {
 
     autoUpdater.on('update-downloaded', (info) => {
       console.log('Update downloaded:', info?.version);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-downloaded', info);
+      }
       dialog.showMessageBox({
         type: 'info',
         title: 'Nâng cấp phần mềm hoàn tất',
-        message: `Đã tải hoàn tất phiên bản mới (v${info?.version || ''}).\nỨng dụng sẽ tự động áp dụng và khởi động lại ngay bây giờ.`,
+        message: `Đã tự động tải hoàn tất phiên bản mới (v${info?.version || ''}).\nỨng dụng sẽ tự động áp dụng bản nâng cấp và khởi động lại ngay bây giờ.`,
         buttons: ['Khởi động lại ngay']
       }).then(() => {
         setImmediate(() => {
@@ -169,7 +175,7 @@ app.whenReady().then(() => {
     });
 
     autoUpdater.on('error', (err) => {
-      console.warn('Lỗi khi kiểm tra cập nhật:', err?.message || err);
+      console.warn('Lỗi khi kiểm tra/tải cập nhật:', err?.message || err);
     });
 
     // Kiểm tra cập nhật định kỳ mỗi 15 phút
