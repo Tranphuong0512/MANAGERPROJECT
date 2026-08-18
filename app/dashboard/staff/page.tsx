@@ -112,6 +112,17 @@ export default function StaffPage() {
     }
 
     loadData()
+
+    // Lắng nghe sự kiện đồng bộ tự động để cập nhật nhân sự & phòng ban ngay tức thì
+    const handleApecSynced = () => {
+      const orgId = activeOrganization?.id || ''
+      if (orgId) {
+        loadStaffAndDepartments(orgId)
+      }
+    }
+
+    window.addEventListener('apec-global-synced', handleApecSynced)
+    return () => window.removeEventListener('apec-global-synced', handleApecSynced)
   }, [router, activeOrganization, isLoadingOrg])
 
     const loadStaffAndDepartments = async (orgId: string) => {
@@ -152,17 +163,23 @@ export default function StaffPage() {
       let apecStaffData = apecStaffResult.data || [];
       const accountList = accountsResult.accounts || [];
 
-      // 1. Danh sách Nhân sự lấy real-time trực tiếp từ API của APEC GLOBAL (không cần đồng bộ lên Supabase)
+      // 1. Danh sách Nhân sự lấy real-time trực tiếp từ API của APEC GLOBAL
       if (liveEmpRes.success && liveEmpRes.items && liveEmpRes.items.length > 0) {
         apecStaffData = liveEmpRes.items.map((e: any) => {
-          const deptName = typeof e.department === 'object' && e.department?.name ? e.department.name : (typeof e.department === 'string' && e.department.trim() ? e.department : (e.department_name || e.dept_name || e.company_name || 'APEC GLOBAL'));
+          const deptName = typeof e.department === 'object' && e.department?.name
+            ? e.department.name
+            : (typeof e.department === 'string' && e.department.trim()
+                ? e.department
+                : (e.department_name || e.dept_name || e.company_name || 'Chưa phân phòng ban'));
+          const roleTitle = e.positions?.name || e.position?.name || e.position || e.job_title || 'Nhân sự APEC GLOBAL';
           return {
             id: `apec_${e.id}`,
-            full_name: e.fullname || e.name || 'Chưa rõ',
+            apec_id: e.id,
+            full_name: e.name || e.fullname || 'Chưa rõ',
             email: e.email || 'Đang cập nhật',
             phone: e.phone || 'Đang cập nhật',
-            role: e.position || e.job_title || 'Thành viên (API)',
-            avatar: e.avatar,
+            role: roleTitle,
+            avatar: e.avatar || e.avatar_url,
             departments: { name: deptName }
           };
         });
@@ -173,7 +190,7 @@ export default function StaffPage() {
         org_member_id: s.id,
         full_name: s.full_name || 'Chưa rõ',
         departments: s.departments?.name ? [s.departments.name] : [],
-        role: s.role || 'Thành viên (API)',
+        role: s.role || 'Nhân sự APEC GLOBAL',
         email: s.email || 'Đang cập nhật',
         phone: s.phone || 'Đang cập nhật',
         avatar: s.avatar || null,
@@ -191,7 +208,32 @@ export default function StaffPage() {
         isApec: true
       }));
 
-      const allPeople = [...apecStaffList, ...accountList];
+      // Đồng bộ thông tin phòng ban mới nhất từ APEC vào danh sách tài khoản nếu trùng khớp email/họ tên
+      const mergedAccounts = accountList.map((acc: any) => {
+        const matchedApec = apecStaffList.find((a: any) => 
+          (a.email && a.email !== 'Đang cập nhật' && a.email.toLowerCase().trim() === (acc.email || '').toLowerCase().trim()) ||
+          (a.full_name && a.full_name.toLowerCase().trim() === (acc.full_name || '').toLowerCase().trim())
+        );
+        if (matchedApec && matchedApec.departments.length > 0) {
+          return {
+            ...acc,
+            full_name: matchedApec.full_name || acc.full_name,
+            departments: matchedApec.departments,
+            role: acc.role || matchedApec.role
+          };
+        }
+        return acc;
+      });
+
+      // Lọc các nhân sự APEC chưa có tài khoản phần mềm
+      const nonAccountApecStaff = apecStaffList.filter((a: any) => {
+        return !mergedAccounts.some((acc: any) => 
+          (a.email && a.email !== 'Đang cập nhật' && a.email.toLowerCase().trim() === (acc.email || '').toLowerCase().trim()) ||
+          (a.full_name && a.full_name.toLowerCase().trim() === (acc.full_name || '').toLowerCase().trim())
+        );
+      });
+
+      const allPeople = [...mergedAccounts, ...nonAccountApecStaff];
 
       if (allPeople.length > 0) {
         const userIds = allPeople.map((s: any) => s.id);

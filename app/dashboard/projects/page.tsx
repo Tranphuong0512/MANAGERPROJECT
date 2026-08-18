@@ -169,6 +169,16 @@ export default function ProjectsPage() {
     }
 
     loadData()
+
+    // Lắng nghe sự kiện đồng bộ tự động để cập nhật dự án & tiến độ tức thì
+    const handleApecSynced = () => {
+      if (activeOrganization?.id) {
+        loadProjectsAndStats(activeOrganization.id)
+      }
+    }
+
+    window.addEventListener('apec-global-synced', handleApecSynced)
+    return () => window.removeEventListener('apec-global-synced', handleApecSynced)
   }, [router, activeOrganization, isLoadingOrg])
 
   const loadProjectsAndStats = async (orgId: string) => {

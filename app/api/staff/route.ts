@@ -40,7 +40,17 @@ export async function GET(request: NextRequest) {
       `)
       .is('deleted_at', null)
 
-    // 4. Map profiles into accountList
+    // 4. Load all synced staff from Supabase staff table
+    const { data: staffList } = await supabaseAdmin
+      .from('staff')
+      .select(`
+        id, organization_id, full_name, email, phone, role, department_id,
+        departments(name)
+      `)
+      .is('deleted_at', null)
+      .order('full_name')
+
+    // 5. Map profiles into accountList
     const accounts = (profiles || []).map((p: any) => {
       const authUser = users.find(u => u.id === p.id)
       const email = authUser?.email || 'Chưa có email'
@@ -75,7 +85,31 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ success: true, accounts })
+    const staffMapped = (staffList || []).map((s: any) => ({
+      id: s.id,
+      org_member_id: s.id,
+      full_name: s.full_name || 'Chưa rõ',
+      email: s.email || 'Đang cập nhật',
+      phone: s.phone || '-',
+      role: s.role || 'Nhân sự APEC GLOBAL',
+      departments: s.departments?.name ? [s.departments.name] : [],
+      is_super_admin: false,
+      stats: {
+        tasks: 0,
+        completedTasks: 0,
+        checklists: 0,
+        incidentsReported: 0,
+        incidentsAssigned: 0,
+        incidentsResolved: 0,
+        incidents: 0,
+        improvements: 0,
+        orgs: 1
+      },
+      isAccount: false,
+      isApec: true
+    }))
+
+    return NextResponse.json({ success: true, accounts, staff: staffMapped })
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Lỗi server' }, { status: 500 })
   }

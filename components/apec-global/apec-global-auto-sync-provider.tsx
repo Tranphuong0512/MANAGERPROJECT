@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 
 interface AutoSyncContextProps {
   isSyncing: boolean;
@@ -15,82 +15,104 @@ const AutoSyncContext = createContext<AutoSyncContextProps>({
 export const useApecGlobalAutoSync = () => useContext(AutoSyncContext);
 
 export function ApecGlobalAutoSyncProvider({ children }: { children: React.ReactNode }) {
-  const syncedRef = useRef(false)
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isSyncingRef = useRef(false);
+  const lastSyncTimeRef = useRef<number>(0);
 
-  useEffect(() => {
-    if (syncedRef.current) return
-    syncedRef.current = true
+  const syncData = useCallback(async (retryCount = 0) => {
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
+    setIsSyncing(true);
 
-    if (typeof window !== 'undefined') {
-      const alreadySynced = sessionStorage.getItem('apec_global_auto_synced');
-      if (alreadySynced) {
-        return;
-      }
-      sessionStorage.setItem('apec_global_auto_synced', 'true');
+    if (retryCount === 0) {
+      setError(null);
     }
 
-    const syncData = async (retryCount = 0) => {
-      setIsSyncing(true);
-      if (retryCount === 0) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 35000); // 35s timeout cho full sync
+
+    try {
+      const res = await fetch('/api/v1/apec-global/auto-sync-all', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (data && data.success) {
+        lastSyncTimeRef.current = Date.now();
+        console.log('[APEC GLOBAL SYNC] Đồng bộ dữ liệu thành công:', data.summary || data.message);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('apec-global-synced', { detail: data }));
+        }
         setError(null);
       }
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout (đủ thời gian cho đồng bộ lớn)
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      const isAbortError = err.name === 'AbortError';
 
-      try {
-        const res = await fetch('/api/v1/apec-global/auto-sync-all', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          signal: controller.signal,
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!res.ok) {
-           throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        
-        const data = await res.json();
-        if (data && data.success) {
-          console.log('[APEC GLOBAL SYNC] Đồng bộ dữ liệu thành công');
-          window.dispatchEvent(new Event('apec-global-synced'));
-          setIsSyncing(false);
-          setError(null);
+      if (retryCount < 2) {
+        const nextInterval = (retryCount + 1) * 3000;
+        console.warn(`[APEC GLOBAL SYNC] Đang thử kết nối lại lần ${retryCount + 1}...`);
+        setTimeout(() => {
+          isSyncingRef.current = false;
+          syncData(retryCount + 1);
+        }, nextInterval);
+        return;
+      } else {
+        if (isAbortError) {
+          console.log('[APEC GLOBAL SYNC] Đồng bộ chạy ngầm, sử dụng dữ liệu cache tức thì.');
         } else {
-          setIsSyncing(false);
+          console.warn('[APEC GLOBAL SYNC] Lỗi đồng bộ API:', err?.message);
         }
-      } catch (err: any) {
-        clearTimeout(timeoutId);
-        
-        const isAbortError = err.name === 'AbortError';
-        
-        // Thử lại tối đa 2 lần cho các lỗi mạng hoặc timeout
-        if (retryCount < 2) {
-          const nextInterval = (retryCount + 1) * 3000;
-          console.warn(`[APEC GLOBAL SYNC] Đang thử kết nối lại lần ${retryCount + 1}...`);
-          
-          setTimeout(() => {
-            syncData(retryCount + 1);
-          }, nextInterval);
-        } else {
-          setIsSyncing(false);
-          if (isAbortError) {
-            console.log('[APEC GLOBAL SYNC] Đồng bộ tự động chạy ngầm, giao diện đang hiển thị dữ liệu tức thì.');
-          } else {
-            console.log('[APEC GLOBAL SYNC] Sử dụng dữ liệu cache để đảm bảo tốc độ phản hồi.');
-          }
-        }
+      }
+    } finally {
+      isSyncingRef.current = false;
+      setIsSyncing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // 1. Initial sync ngay khi khởi động
+    syncData();
+
+    // 2. Định kỳ đồng bộ ngầm liên tục mỗi 60 giây (1 phút)
+    const interval = setInterval(() => {
+      syncData();
+    }, 60000);
+
+    // 3. Tự động kiểm tra & đồng bộ khi người dùng focus quay lại tab/ứng dụng (nếu đã qua 30s)
+    const handleFocus = () => {
+      if (Date.now() - lastSyncTimeRef.current > 30000) {
+        syncData();
       }
     };
 
-    syncData();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', handleFocus);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          handleFocus();
+        }
+      });
+    }
 
-  }, []);
+    return () => {
+      clearInterval(interval);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', handleFocus);
+      }
+    };
+  }, [syncData]);
 
   return (
     <AutoSyncContext.Provider value={{ isSyncing, error }}>

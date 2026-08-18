@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { invalidateCache } from '@/lib/services/server-cache';
 import {
   getApecCompanies,
   getApecProjects,
@@ -144,7 +145,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // --- 2.3. Đồng bộ Nhân sự & Profile ---
+    // --- 2.3. Đồng bộ Toàn diện Nhân sự & Phòng ban (staff & profiles & member_departments) ---
     const authUsers = authUsersData?.users || [];
     const nameToUuid = new Map<string, string>();
     authUsers.forEach(u => {
@@ -154,10 +155,102 @@ export async function POST(request: NextRequest) {
     });
 
     const employees = empRes.success ? empRes.items || [] : [];
+
+    // 1. Đảm bảo tất cả phòng ban từ danh sách nhân sự APEC đều được khởi tạo trong departments
     for (const emp of employees) {
-      const empName = (emp.fullname || emp.name || '').trim();
-      if (empName && !nameToUuid.has(empName.toLowerCase())) {
-        nameToUuid.set(empName.toLowerCase(), `apec_emp_${emp.id}`);
+      const dName = (typeof emp.department === 'object' && emp.department?.name ? emp.department.name : (typeof emp.department === 'string' && emp.department.trim() ? emp.department : (emp.department_name || ''))).trim();
+      if (dName) {
+        const orgIdToUse = defaultOrgId!;
+        const key = `${orgIdToUse}_${dName.toLowerCase()}`;
+        if (!deptMap.has(key)) {
+          const { data: createdDept } = await supabaseAdmin
+            .from('departments')
+            .insert({
+              organization_id: orgIdToUse,
+              name: dName,
+              description: `Đồng bộ từ Nhân sự APEC GLOBAL`,
+            })
+            .select('id')
+            .maybeSingle();
+          if (createdDept) {
+            deptMap.set(key, createdDept.id);
+          }
+        }
+      }
+    }
+
+    // 2. Đồng bộ / Cập nhật bảng staff trong Supabase
+    const staffToUpsert: any[] = [];
+    for (const emp of employees) {
+      const empName = (emp.name || emp.fullname || '').trim();
+      if (!empName) continue;
+
+      const deterministicId = `00000000-0000-0000-0000-${String(emp.id).padStart(12, '0')}`;
+      const dName = (typeof emp.department === 'object' && emp.department?.name ? emp.department.name : (typeof emp.department === 'string' && emp.department.trim() ? emp.department : (emp.department_name || ''))).trim();
+      const deptId = dName ? deptMap.get(`${defaultOrgId}_${dName.toLowerCase()}`) : null;
+      const roleTitle = (emp.positions as any)?.name || (emp.position as any)?.name || (typeof emp.position === 'string' ? emp.position : null) || emp.job_title || 'Nhân sự APEC GLOBAL';
+
+      staffToUpsert.push({
+        id: deterministicId,
+        organization_id: defaultOrgId,
+        department_id: deptId || null,
+        full_name: empName,
+        role: roleTitle,
+        email: emp.email || null,
+        phone: emp.phone || null,
+        updated_at: new Date().toISOString(),
+        deleted_at: null,
+      });
+
+      // Ghi nhận map id
+      nameToUuid.set(empName.toLowerCase(), deterministicId);
+      if (emp.email) nameToUuid.set(emp.email.toLowerCase().trim(), deterministicId);
+      nameToUuid.set(String(emp.id), deterministicId);
+    }
+
+    if (staffToUpsert.length > 0) {
+      await supabaseAdmin.from('staff').upsert(staffToUpsert, { onConflict: 'id' });
+    }
+
+    // 3. Cập nhật thông tin Họ Tên & Chuyển phòng ban cho các tài khoản đăng nhập (profiles & member_departments)
+    for (const emp of employees) {
+      const empName = (emp.name || emp.fullname || '').trim();
+      const empEmail = (emp.email || '').toLowerCase().trim();
+      const matchedUser = authUsers.find(u =>
+        (empEmail && u.email?.toLowerCase().trim() === empEmail) ||
+        (empName && (u.user_metadata?.full_name || '').toLowerCase().trim() === empName.toLowerCase())
+      );
+
+      if (matchedUser) {
+        nameToUuid.set(empName.toLowerCase(), matchedUser.id);
+        if (empEmail) nameToUuid.set(empEmail, matchedUser.id);
+
+        // Cập nhật Họ Tên & SĐT mới nhất trong profiles
+        await supabaseAdmin.from('profiles').update({
+          full_name: empName,
+          phone: emp.phone || undefined,
+          updated_at: new Date().toISOString(),
+        }).eq('id', matchedUser.id);
+
+        // Cập nhật Phòng ban mới nhất trong member_departments
+        const dName = (typeof emp.department === 'object' && emp.department?.name ? emp.department.name : (typeof emp.department === 'string' && emp.department.trim() ? emp.department : (emp.department_name || ''))).trim();
+        const newDeptId = dName ? deptMap.get(`${defaultOrgId}_${dName.toLowerCase()}`) : null;
+
+        if (newDeptId) {
+          const { data: memberRecord } = await supabaseAdmin
+            .from('organization_members')
+            .select('id')
+            .eq('user_id', matchedUser.id)
+            .maybeSingle();
+
+          if (memberRecord) {
+            await supabaseAdmin.from('member_departments').delete().eq('organization_member_id', memberRecord.id);
+            await supabaseAdmin.from('member_departments').insert({
+              organization_member_id: memberRecord.id,
+              department_id: newDeptId,
+            });
+          }
+        }
       }
     }
 
@@ -395,6 +488,15 @@ export async function POST(request: NextRequest) {
     }
 
     await Promise.allSettled(batchPromises);
+
+    // Invalidate API resource cache so all endpoints fetch fresh data
+    invalidateCache('apec-global:companies');
+    invalidateCache('apec-global:departments');
+    invalidateCache('apec-global:projects');
+    invalidateCache('apec-global:employees');
+    invalidateCache('apec-global:tasks');
+    invalidateCache('apec-global:task-types');
+    invalidateCache('apec-global:assignments');
 
     const summary = {
       companies: companies.length,
