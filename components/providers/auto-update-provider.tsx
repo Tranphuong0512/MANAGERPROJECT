@@ -1,7 +1,7 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { Sparkles, X, RefreshCw, CheckCircle2, ArrowRight, ShieldCheck, Zap } from 'lucide-react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
+import { Sparkles, X, RefreshCw, CheckCircle2, ArrowRight, ShieldCheck, Zap, DownloadCloud, Loader2 } from 'lucide-react'
 import { showToast } from '@/utils/alert'
 
 interface UpdateInfo {
@@ -20,15 +20,21 @@ interface UpdateInfo {
 interface AutoUpdateContextType {
   updateInfo: UpdateInfo | null
   isChecking: boolean
+  downloadPercent: number
+  isReadyToRestart: boolean
   checkNow: (showNoUpdateToast?: boolean) => Promise<void>
   dismissUpdate: () => void
+  applyUpdateAndRestart: () => void
 }
 
 const AutoUpdateContext = createContext<AutoUpdateContextType>({
   updateInfo: null,
   isChecking: false,
+  downloadPercent: 0,
+  isReadyToRestart: false,
   checkNow: async () => {},
   dismissUpdate: () => {},
+  applyUpdateAndRestart: () => {},
 })
 
 export const useAutoUpdate = () => useContext(AutoUpdateContext)
@@ -37,6 +43,68 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [isChecking, setIsChecking] = useState(false)
   const [isDismissed, setIsDismissed] = useState(false)
+  const [downloadPercent, setDownloadPercent] = useState(0)
+  const [isReadyToRestart, setIsReadyToRestart] = useState(false)
+  const simTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const applyUpdateAndRestart = useCallback(() => {
+    if (typeof window !== 'undefined' && (window as any).electron?.quitAndInstall) {
+      (window as any).electron.quitAndInstall()
+    } else {
+      window.location.reload()
+    }
+  }, [])
+
+  // Setup Electron IPC listeners if available
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const electron = (window as any).electron
+    if (!electron) return
+
+    const cleanupProgress = electron.onUpdateProgress?.((progressObj: any) => {
+      if (progressObj?.percent != null) {
+        const p = Math.min(100, Math.max(0, Math.round(progressObj.percent)))
+        setDownloadPercent(p)
+        if (p >= 100) {
+          setIsReadyToRestart(true)
+        }
+      }
+    })
+
+    const cleanupDownloaded = electron.onUpdateDownloaded?.(() => {
+      setDownloadPercent(100)
+      setIsReadyToRestart(true)
+    })
+
+    return () => {
+      cleanupProgress?.()
+      cleanupDownloaded?.()
+    }
+  }, [])
+
+  // Start smooth progress animation if real progress is waiting
+  useEffect(() => {
+    if (updateInfo?.update_available && !isReadyToRestart) {
+      if (simTimerRef.current) clearInterval(simTimerRef.current)
+
+      let current = downloadPercent > 0 ? downloadPercent : 12
+      setDownloadPercent(current)
+
+      simTimerRef.current = setInterval(() => {
+        setDownloadPercent((prev) => {
+          if (prev >= 96) {
+            return prev
+          }
+          const increment = Math.floor(Math.random() * 8) + 4
+          return Math.min(96, prev + increment)
+        })
+      }, 1200)
+
+      return () => {
+        if (simTimerRef.current) clearInterval(simTimerRef.current)
+      }
+    }
+  }, [updateInfo?.update_available, isReadyToRestart])
 
   const checkNow = useCallback(async (showNoUpdateToast: boolean = false) => {
     setIsChecking(true)
@@ -50,7 +118,7 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
           setIsDismissed(false)
           showToast(
             'info',
-            `🚀 Đã phát hiện phiên bản mới v${data.latest_version}. Hệ thống đang tự động tải và nâng cấp trong nền...`,
+            `🚀 Đã phát hiện phiên bản mới v${data.latest_version}. Hệ thống đang tự động tải và cập nhật trong nền...`,
             'TỰ ĐỘNG NÂNG CẤP'
           )
         } else if (showNoUpdateToast) {
@@ -90,7 +158,17 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <AutoUpdateContext.Provider value={{ updateInfo, isChecking, checkNow, dismissUpdate }}>
+    <AutoUpdateContext.Provider
+      value={{
+        updateInfo,
+        isChecking,
+        downloadPercent,
+        isReadyToRestart,
+        checkNow,
+        dismissUpdate,
+        applyUpdateAndRestart
+      }}
+    >
       {children}
 
       {/* Floating Realtime Automatic Update Modal / Banner */}
@@ -115,7 +193,9 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
                     <span className="text-xs font-extrabold text-cyan-300">v{updateInfo.latest_version}</span>
                   </div>
                   <h4 className="font-extrabold text-base text-white mt-1 leading-snug">
-                    Phát hiện phiên bản mới v{updateInfo.latest_version}
+                    {isReadyToRestart
+                      ? `Đã tải hoàn tất phiên bản v${updateInfo.latest_version}`
+                      : `Phát hiện phiên bản mới v${updateInfo.latest_version}`}
                   </h4>
                 </div>
               </div>
@@ -143,20 +223,39 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
             </div>
 
             {/* Status & Automated Background Progress Notice */}
-            <div className="p-3.5 bg-gradient-to-r from-blue-900/40 to-cyan-950/40 border border-cyan-400/30 rounded-xl mb-3.5 relative overflow-hidden">
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-300 shrink-0 mt-0.5">
-                  <RefreshCw className="w-4 h-4 animate-spin text-cyan-300" />
+            <div className="p-4 bg-gradient-to-r from-blue-950/60 to-slate-900/80 border border-cyan-400/30 rounded-xl mb-3.5 relative overflow-hidden">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-cyan-200">
+                  {isReadyToRestart ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span className="text-emerald-300">Đã tải xong 100% - Sẵn sàng áp dụng</span>
+                    </>
+                  ) : (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                      <span>Đang tải ngầm gói nâng cấp...</span>
+                    </>
+                  )}
                 </div>
-                <div className="text-xs leading-relaxed space-y-1">
-                  <p className="font-bold text-cyan-200">
-                    Đang tải ngầm và tự động cài đặt bản mới...
-                  </p>
-                  <p className="text-slate-300 text-[11px]">
-                    Xin vui lòng chờ trong giây lát. Hệ thống sẽ tự động áp dụng bản nâng cấp và khởi động lại khi hoàn tất. Quý khách có thể tiếp tục làm việc bình thường.
-                  </p>
-                </div>
+                <span className="text-xs font-black text-cyan-300 font-mono">
+                  {downloadPercent}%
+                </span>
               </div>
+
+              {/* Realtime Animated Progress Bar */}
+              <div className="w-full h-2.5 bg-black/60 rounded-full overflow-hidden p-0.5 border border-cyan-500/30 mb-2.5">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-teal-400 to-emerald-400 transition-all duration-500 shadow-sm shadow-cyan-400"
+                  style={{ width: `${downloadPercent}%` }}
+                ></div>
+              </div>
+
+              <p className="text-slate-300 text-[11px] leading-relaxed">
+                {isReadyToRestart
+                  ? 'Gói cài đặt đã được tải về hoàn tất và sẵn sàng áp dụng. Ứng dụng sẽ khởi động lại để hoàn tất nâng cấp.'
+                  : 'Hệ thống đang tự động tải gói cài đặt trong nền. Quý khách có thể tiếp tục làm việc bình thường.'}
+              </p>
             </div>
 
             {/* Release Notes (if any) */}
@@ -167,14 +266,24 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
               </div>
             )}
 
-            {/* Action Confirmation Button (Only Dismiss/Acknowledge) */}
-            <button
-              onClick={() => setIsDismissed(true)}
-              className="w-full px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-600 via-teal-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white shadow-lg shadow-cyan-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
-            >
-              <ShieldCheck className="w-4 h-4" />
-              Đã hiểu (Hệ thống tự động nâng cấp ngầm)
-            </button>
+            {/* Action Confirmation Button (Only Dismiss or Restart) */}
+            {isReadyToRestart ? (
+              <button
+                onClick={applyUpdateAndRestart}
+                className="w-full px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white shadow-lg shadow-emerald-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] animate-pulse"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Khởi động lại để hoàn tất nâng cấp ngay
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsDismissed(true)}
+                className="w-full px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-600 via-teal-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white shadow-lg shadow-cyan-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                Ẩn thông báo (Hệ thống tiếp tục tự tải trong nền)
+              </button>
+            )}
 
           </div>
         </div>
@@ -182,4 +291,3 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
     </AutoUpdateContext.Provider>
   )
 }
-

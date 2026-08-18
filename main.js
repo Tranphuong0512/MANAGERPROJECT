@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
@@ -105,6 +105,7 @@ async function createWindow() {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
+        preload: getAppPath('preload.js'),
       },
     });
 
@@ -172,6 +173,11 @@ app.whenReady().then(async () => {
       }).catch(() => {
         autoUpdater.quitAndInstall(false, true);
       });
+    });
+
+    ipcMain.on('quit-and-install', () => {
+      console.log('IPC quit-and-install received. Installing update...');
+      autoUpdater.quitAndInstall(false, true);
     });
 
     autoUpdater.on('error', (err) => {

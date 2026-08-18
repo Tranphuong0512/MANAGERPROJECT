@@ -21,8 +21,11 @@ try {
   copyRecursiveSync(path.join(__dirname, 'public'), path.join(__dirname, '.next', 'standalone', 'public'));
   copyRecursiveSync(path.join(__dirname, '.next', 'static'), path.join(__dirname, '.next', 'standalone', '.next', 'static'));
   
-  // Also copy main.js to standalone directory so we can pack ONLY the standalone directory
+  // Also copy main.js and preload.js to standalone directory so we can pack ONLY the standalone directory
   fs.copyFileSync(path.join(__dirname, 'main.js'), path.join(__dirname, '.next', 'standalone', 'main.js'));
+  if (fs.existsSync(path.join(__dirname, 'preload.js'))) {
+    fs.copyFileSync(path.join(__dirname, 'preload.js'), path.join(__dirname, '.next', 'standalone', 'preload.js'));
+  }
   
   // Copy package.json to standalone because electron-builder needs it (actually standalone has its own package.json, we need to merge or overwrite it so electron-builder knows the main entry)
   const rootPkg = require('./package.json');
