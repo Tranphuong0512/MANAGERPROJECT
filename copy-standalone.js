@@ -100,6 +100,13 @@ try {
     stdio: 'inherit',
     env: process.env
   });
+
+  console.log('Finalizing and publishing release to GitHub...');
+  execSync('node scripts/publish-release.js', {
+    cwd: __dirname,
+    stdio: 'inherit',
+    env: process.env
+  });
 } catch (err) {
   console.error('Error during build/standalone preparation:', err);
   process.exit(1);
