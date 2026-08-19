@@ -2,11 +2,11 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 
 /**
- * Next.js 16 Proxy — Bảo vệ route xác thực + Refresh session
+ * Next.js 16 Proxy — Bảo vệ route xác thực + Luôn yêu cầu đăng nhập khi mở ứng dụng
  * 
  * 1. Refresh Supabase Auth session token trên mọi request
  * 2. Redirect về /login nếu chưa đăng nhập khi truy cập /dashboard/*
- * 3. Redirect về /dashboard nếu đã đăng nhập khi truy cập /login
+ * 3. Luôn hiển thị trang /login khi mở ứng dụng (KHÔNG tự động đăng nhập)
  */
 export async function proxy(request: NextRequest) {
   // 1. Refresh session và cập nhật cookies
@@ -37,13 +37,6 @@ export async function proxy(request: NextRequest) {
     loginUrl.pathname = '/login'
     loginUrl.searchParams.set('redirect', pathname)
     return NextResponse.redirect(loginUrl)
-  }
-
-  // 4. Redirect về dashboard nếu đã đăng nhập mà truy cập login
-  if (pathname === '/login' && hasSession) {
-    const dashboardUrl = request.nextUrl.clone()
-    dashboardUrl.pathname = '/dashboard'
-    return NextResponse.redirect(dashboardUrl)
   }
 
   return response

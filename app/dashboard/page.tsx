@@ -347,11 +347,11 @@ export default function DashboardPage() {
         let activitiesPromise: any = null;
 
         if (supabaseProjectIds.length > 0) {
-          // A) Lấy toàn bộ TASKS trực tiếp từ bảng tasks
+          // A) Lấy toàn bộ TASKS trực tiếp từ bảng tasks (kèm parent_task_id để liên kết cha-con)
           supabaseTasksPromise = supabase
             .from('tasks')
             .select(`
-              id, title, description, status, priority, progress_percentage, start_date, due_date, created_at, project_id, assigned_to,
+              id, title, description, status, priority, progress_percentage, start_date, due_date, created_at, project_id, assigned_to, parent_task_id,
               projects(id, name, department_id, departments(id, name)),
               assigned_user:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url)
             `)
@@ -379,16 +379,16 @@ export default function DashboardPage() {
             .order('created_at', { ascending: false })
             .limit(10);
         } else {
-          // Nếu chưa có project supabase cụ thể, thử lấy chung nếu có
+          // Nếu chưa có project supabase cụ thể, lấy chung
           supabaseTasksPromise = supabase
             .from('tasks')
             .select(`
-              id, title, description, status, priority, progress_percentage, start_date, due_date, created_at, project_id, assigned_to,
+              id, title, description, status, priority, progress_percentage, start_date, due_date, created_at, project_id, assigned_to, parent_task_id,
               projects(id, name, department_id, departments(id, name))
             `)
             .is('deleted_at', null)
             .order('created_at', { ascending: false })
-            .limit(200);
+            .limit(1000);
 
           supabaseChecklistPromise = supabase
             .from('checklist_items')
@@ -400,7 +400,7 @@ export default function DashboardPage() {
             `)
             .is('deleted_at', null)
             .order('updated_at', { ascending: false })
-            .limit(200);
+            .limit(1000);
         }
 
         const [tasksRes, checklistRes, activitiesResult] = await Promise.all([
@@ -413,72 +413,104 @@ export default function DashboardPage() {
         const rawChecklistList = checklistRes?.data || [];
         const activitiesData = activitiesResult?.data || [];
 
-        // 3. Chuẩn hóa & Xử lý tasks từ bảng `tasks` của Supabase
-        const overviewFromTasksTable: any[] = rawTasksList.map((t: any) => {
-          const prj = t.projects || projectMap.get(String(t.project_id));
-          const strStatus = String(t.status || '').toLowerCase().trim();
-          
-          // Đã hoàn thành / Đã duyệt
-          const isDone = t.status === 'done' || t.status === 'completed' || t.status === 'resolved' || Boolean(t.is_completed) || strStatus.includes('hoàn thành') || strStatus.includes('đã duyệt') || strStatus.includes('da duyet') || strStatus.includes('đã phê duyệt');
-          
-          // Chờ duyệt: Khi không ở trạng thái Hoàn thành VÀ (status là review / in_review / chờ duyệt HOẶC tiến độ 100%)
-          const isReview = !isDone && (t.status === 'review' || t.status === 'in_review' || t.status === 'pending_approval' || strStatus.includes('chờ') || strStatus.includes('đợi') || strStatus.includes('pending') || Number(t.progress_percentage) >= 100);
-          
-          const progressVal = Number(t.progress_percentage ?? (isDone ? 100 : isReview ? 100 : (t.status === 'in_progress' ? 50 : 0)));
+        // 3. Chuẩn hóa & Xử lý tasks từ bảng `tasks` của Supabase (Bao gồm phân cấp Cha - Con)
+        // Gom các tasks con theo parent_task_id
+        const supabaseChildrenMap = new Map<string, any[]>();
+        rawTasksList.forEach((t: any) => {
+          if (t.parent_task_id) {
+            const pId = String(t.parent_task_id);
+            if (!supabaseChildrenMap.has(pId)) supabaseChildrenMap.set(pId, []);
+            const strStatus = String(t.status || '').toLowerCase().trim();
+            const isDone = t.status === 'done' || t.status === 'completed' || strStatus.includes('hoàn thành') || strStatus.includes('đã duyệt');
+            const proc = Number(t.progress_percentage ?? (isDone ? 100 : 0));
+            supabaseChildrenMap.get(pId)!.push({
+              id: t.id,
+              raw_id: t.id,
+              title: t.title,
+              status: isDone ? 'done' : (t.status === 'in_progress' ? 'in_progress' : 'todo'),
+              progress: proc,
+              process: proc,
+              checked: isDone,
+              assignee: t.assigned_user ? {
+                id: t.assigned_user.id,
+                full_name: t.assigned_user.full_name,
+                avatar_url: t.assigned_user.avatar_url,
+              } : undefined,
+              start_date: t.start_date || t.created_at || null,
+              due_date: t.due_date || null,
+            });
+          }
+        });
 
-          // Phân giải người thực hiện
-          let assigneeObj: { id?: any; full_name?: string; avatar_url?: string } | undefined = undefined;
-          if (t.assigned_user) {
-            assigneeObj = {
-              id: t.assigned_user.id,
-              full_name: t.assigned_user.full_name,
-              avatar_url: t.assigned_user.avatar_url,
-            };
-          } else if (t.assigned_to) {
-            const strAssignedTo = String(t.assigned_to);
-            const prof = profilesMap.get(strAssignedTo);
-            const st = staffMap.get(strAssignedTo);
-            const apecEmp = apecEmpMap.get(strAssignedTo);
-            if (prof) {
-              assigneeObj = { id: prof.id, full_name: prof.full_name, avatar_url: prof.avatar_url };
-            } else if (st) {
-              assigneeObj = { id: st.id, full_name: st.full_name, avatar_url: st.avatar_url };
-            } else if (apecEmp) {
-              assigneeObj = { id: apecEmp.id, full_name: apecEmp.fullname || apecEmp.name, avatar_url: apecEmp.avatar };
+        const overviewFromTasksTable: any[] = rawTasksList
+          .filter((t: any) => !t.parent_task_id) // Chỉ lấy task gốc ở cấp độ 1
+          .map((t: any) => {
+            const prj = t.projects || projectMap.get(String(t.project_id));
+            const strStatus = String(t.status || '').toLowerCase().trim();
+            
+            // Đã hoàn thành / Đã duyệt
+            const isDone = t.status === 'done' || t.status === 'completed' || t.status === 'resolved' || Boolean(t.is_completed) || strStatus.includes('hoàn thành') || strStatus.includes('đã duyệt') || strStatus.includes('da duyet') || strStatus.includes('đã phê duyệt');
+            
+            // Chờ duyệt: Khi không ở trạng thái Hoàn thành VÀ (status là review / in_review / chờ duyệt HOẶC tiến độ 100%)
+            const isReview = !isDone && (t.status === 'review' || t.status === 'in_review' || t.status === 'pending_approval' || strStatus.includes('chờ') || strStatus.includes('đợi') || strStatus.includes('pending') || Number(t.progress_percentage) >= 100);
+            
+            const progressVal = Number(t.progress_percentage ?? (isDone ? 100 : isReview ? 100 : (t.status === 'in_progress' ? 50 : 0)));
+
+            // Phân giải người thực hiện
+            let assigneeObj: { id?: any; full_name?: string; avatar_url?: string } | undefined = undefined;
+            if (t.assigned_user) {
+              assigneeObj = {
+                id: t.assigned_user.id,
+                full_name: t.assigned_user.full_name,
+                avatar_url: t.assigned_user.avatar_url,
+              };
+            } else if (t.assigned_to) {
+              const strAssignedTo = String(t.assigned_to);
+              const prof = profilesMap.get(strAssignedTo);
+              const st = staffMap.get(strAssignedTo);
+              const apecEmp = apecEmpMap.get(strAssignedTo);
+              if (prof) {
+                assigneeObj = { id: prof.id, full_name: prof.full_name, avatar_url: prof.avatar_url };
+              } else if (st) {
+                assigneeObj = { id: st.id, full_name: st.full_name, avatar_url: st.avatar_url };
+              } else if (apecEmp) {
+                assigneeObj = { id: apecEmp.id, full_name: apecEmp.fullname || apecEmp.name, avatar_url: apecEmp.avatar };
+              }
             }
-          }
 
-          // Phân giải phòng ban
-          let deptName = '';
-          let deptId: any = undefined;
+            // Phân giải phòng ban
+            let deptName = '';
+            let deptId: any = undefined;
 
-          if (assigneeObj?.id) {
-            const found = employeeDeptMap.get(String(assigneeObj.id));
-            if (found) {
-              deptName = found.deptName;
-              deptId = found.deptId;
+            if (assigneeObj?.id) {
+              const found = employeeDeptMap.get(String(assigneeObj.id));
+              if (found) {
+                deptName = found.deptName;
+                deptId = found.deptId;
+              }
             }
-          }
-          if (!deptName && assigneeObj?.full_name) {
-            const found = employeeDeptMap.get(assigneeObj.full_name.trim().toLowerCase());
-            if (found) {
-              deptName = found.deptName;
-              deptId = found.deptId;
+            if (!deptName && assigneeObj?.full_name) {
+              const found = employeeDeptMap.get(assigneeObj.full_name.trim().toLowerCase());
+              if (found) {
+                deptName = found.deptName;
+                deptId = found.deptId;
+              }
             }
-          }
 
-          if (!deptName) {
-            deptName = prj?.departments?.name || prj?.department_name;
-            deptId = prj?.department_id || prj?.departments?.id;
-          }
+            if (!deptName) {
+              deptName = prj?.departments?.name || prj?.department_name;
+              deptId = prj?.department_id || prj?.departments?.id;
+            }
 
-          if (!deptName) {
-            deptName = 'Chung / Chưa phân loại';
-          }
+            if (!deptName) {
+              deptName = 'Chung / Chưa phân loại';
+            }
 
-          // Trích xuất ngày bắt đầu và hạn chót toàn diện
-          const taskStartDate = t.start_date || t.date_start || t.created_at || null;
-          const taskDueDate = t.due_date || t.end_date || t.date_end || t.finish_date || t.completed_date || t.target_date || null;
+            // Trích xuất ngày bắt đầu và hạn chót toàn diện
+            const taskStartDate = t.start_date || t.date_start || t.created_at || null;
+            const taskDueDate = t.due_date || t.end_date || t.date_end || t.finish_date || t.completed_date || t.target_date || null;
+
+            const childSubtasks = supabaseChildrenMap.get(String(t.id)) || [];
 
             return {
               id: t.id,
@@ -490,6 +522,7 @@ export default function DashboardPage() {
               department_name: deptName,
               checklist_title: (t as any).category || (t as any).type || (t as any).task_type || 'Nhiệm vụ chung',
               assignee: assigneeObj,
+              assignees: assigneeObj ? [assigneeObj] : [],
               start_date: taskStartDate,
               due_date: taskDueDate,
               progress: progressVal,
@@ -497,8 +530,10 @@ export default function DashboardPage() {
               priority: (t.priority || 'medium') as any,
               source: 'supabase' as const,
               _table: 'tasks' as const,
+              subtasks: childSubtasks,
+              task_type: assigneeObj ? 'personal' : 'shared',
             };
-        });
+          });
 
         // 4. Chuẩn hóa & Xử lý tasks từ bảng `checklist_items` của Supabase
         const overviewFromChecklistTable: any[] = rawChecklistList
@@ -517,54 +552,74 @@ export default function DashboardPage() {
             
             const progressVal = Number(t.progress ?? (isDone ? 100 : isReview ? 100 : (rawSt === 'in_progress' ? 50 : 0)));
 
-            // Phân giải người thực hiện từ assignee / assigned_staff_id / assignee_ids
-            let assigneeObj: { id?: any; full_name?: string; avatar_url?: string } | undefined = undefined;
+            // Phân giải tất cả người thực hiện từ assignee / assigned_staff_id / assignee_ids (Đa nhân sự & việc riêng/chung)
+            const allAssigneesList: any[] = [];
+            const seenAssigneeSet = new Set<string>();
 
             if (t.assignee) {
-              assigneeObj = {
+              allAssigneesList.push({
                 id: t.assignee.id,
                 full_name: t.assignee.full_name,
                 avatar_url: t.assignee.avatar_url,
-              };
-            } else if (t.assigned_staff_id) {
+                department_name: t.assignee.departments?.name,
+                department_id: t.assignee.department_id,
+              });
+              seenAssigneeSet.add(String(t.assignee.id));
+            }
+
+            if (t.assigned_staff_id && !seenAssigneeSet.has(String(t.assigned_staff_id))) {
               const strStaffId = String(t.assigned_staff_id);
               const st = staffMap.get(strStaffId);
               const prof = profilesMap.get(strStaffId);
               const apecEmp = apecEmpMap.get(strStaffId);
               if (st) {
-                assigneeObj = { id: st.id, full_name: st.full_name, avatar_url: st.avatar_url };
+                allAssigneesList.push({ id: st.id, full_name: st.full_name, avatar_url: st.avatar_url, department_name: st.departments?.name, department_id: st.department_id });
+                seenAssigneeSet.add(strStaffId);
               } else if (prof) {
-                assigneeObj = { id: prof.id, full_name: prof.full_name, avatar_url: prof.avatar_url };
+                allAssigneesList.push({ id: prof.id, full_name: prof.full_name, avatar_url: prof.avatar_url });
+                seenAssigneeSet.add(strStaffId);
               } else if (apecEmp) {
-                assigneeObj = { id: apecEmp.id, full_name: apecEmp.fullname || apecEmp.name, avatar_url: apecEmp.avatar };
-              }
-            } else if (Array.isArray(t.assignee_ids) && t.assignee_ids.length > 0) {
-              const firstId = String(t.assignee_ids[0]);
-              const st = staffMap.get(firstId);
-              const prof = profilesMap.get(firstId);
-              const apecEmp = apecEmpMap.get(firstId);
-              if (st) {
-                assigneeObj = { id: st.id, full_name: st.full_name, avatar_url: st.avatar_url };
-              } else if (prof) {
-                assigneeObj = { id: prof.id, full_name: prof.full_name, avatar_url: prof.avatar_url };
-              } else if (apecEmp) {
-                assigneeObj = { id: apecEmp.id, full_name: apecEmp.fullname || apecEmp.name, avatar_url: apecEmp.avatar };
+                allAssigneesList.push({ id: apecEmp.id, full_name: apecEmp.fullname || apecEmp.name, avatar_url: apecEmp.avatar });
+                seenAssigneeSet.add(strStaffId);
               }
             }
+
+            if (Array.isArray(t.assignee_ids)) {
+              t.assignee_ids.forEach((aId: any) => {
+                const strId = String(aId);
+                if (!seenAssigneeSet.has(strId)) {
+                  const st = staffMap.get(strId);
+                  const prof = profilesMap.get(strId);
+                  const apecEmp = apecEmpMap.get(strId);
+                  if (st) {
+                    allAssigneesList.push({ id: st.id, full_name: st.full_name, avatar_url: st.avatar_url, department_name: st.departments?.name, department_id: st.department_id });
+                    seenAssigneeSet.add(strId);
+                  } else if (prof) {
+                    allAssigneesList.push({ id: prof.id, full_name: prof.full_name, avatar_url: prof.avatar_url });
+                    seenAssigneeSet.add(strId);
+                  } else if (apecEmp) {
+                    allAssigneesList.push({ id: apecEmp.id, full_name: apecEmp.fullname || apecEmp.name, avatar_url: apecEmp.avatar });
+                    seenAssigneeSet.add(strId);
+                  }
+                }
+              });
+            }
+
+            const primaryAssignee = allAssigneesList[0] || undefined;
 
             // Phân giải phòng ban
             let deptName = t.assignee?.departments?.name;
             let deptId = t.assignee?.department_id;
 
-            if (!deptName && assigneeObj?.id) {
-              const found = employeeDeptMap.get(String(assigneeObj.id));
+            if (!deptName && primaryAssignee?.id) {
+              const found = employeeDeptMap.get(String(primaryAssignee.id));
               if (found) {
                 deptName = found.deptName;
                 deptId = found.deptId;
               }
             }
-            if (!deptName && assigneeObj?.full_name) {
-              const found = employeeDeptMap.get(assigneeObj.full_name.trim().toLowerCase());
+            if (!deptName && primaryAssignee?.full_name) {
+              const found = employeeDeptMap.get(primaryAssignee.full_name.trim().toLowerCase());
               if (found) {
                 deptName = found.deptName;
                 deptId = found.deptId;
@@ -593,7 +648,8 @@ export default function DashboardPage() {
               department_id: deptId,
               department_name: deptName,
               checklist_title: t.project_checklists?.title || t.project_checklists?.name || 'Checklist dự án',
-              assignee: assigneeObj,
+              assignee: primaryAssignee,
+              assignees: allAssigneesList,
               start_date: ciStartDate,
               due_date: ciDueDate,
               progress: progressVal,
@@ -601,10 +657,12 @@ export default function DashboardPage() {
               priority: (t.priority || 'medium') as any,
               source: 'supabase' as const,
               _table: 'checklist_items' as const,
+              subtasks: [],
+              task_type: allAssigneesList.length > 0 ? 'personal' : 'shared',
             };
           });
 
-        // 5. Chuẩn hóa & Xử lý tasks từ APEC Global API
+        // 5. Chuẩn hóa & Xử lý tasks từ APEC Global API (Bao gồm Subtasks và Đa nhân sự)
         let apecTasksRawItems: any[] = [];
         let overviewApecTasks: any[] = [];
 
@@ -642,50 +700,70 @@ export default function DashboardPage() {
               resolvedStatus = 'todo';
             }
 
-            // Trích xuất thông tin người thực hiện
-            let assigneeName = '';
-            let assigneeId: any = undefined;
-            let assigneeAvatar = undefined;
-            let deptName = '';
-            let deptId: any = undefined;
+            // Trích xuất TOÀN BỘ danh sách người thực hiện (Đa nhân sự cho cả việc chung và việc riêng)
+            const apecAssigneesList: any[] = [];
+            const seenApecEmpIds = new Set<string>();
 
-            if (Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
-              const firstEa = t.employee_assignments[0];
-              const emp = firstEa.employee;
-              if (emp) {
-                assigneeName = emp.fullname || emp.name || '';
-                assigneeId = emp.id;
-                assigneeAvatar = emp.avatar;
-                deptName = emp.department_name || (typeof emp.department === 'object' ? emp.department?.name : (typeof emp.department === 'string' ? emp.department : ''));
-                deptId = emp.department_id || emp.department?.id;
+            if (ea.length > 0) {
+              ea.forEach((assign: any) => {
+                const emp = assign.employee;
+                if (emp) {
+                  const empId = String(emp.id || '');
+                  const empName = emp.fullname || emp.name || '';
+                  if (empId && !seenApecEmpIds.has(empId)) {
+                    seenApecEmpIds.add(empId);
+                    let eDeptName = emp.department_name || (typeof emp.department === 'object' ? emp.department?.name : (typeof emp.department === 'string' ? emp.department : ''));
+                    let eDeptId = emp.department_id || emp.department?.id;
+                    if (!eDeptName) {
+                      const found = employeeDeptMap.get(empId) || employeeDeptMap.get(empName.trim().toLowerCase());
+                      if (found) {
+                        eDeptName = found.deptName;
+                        eDeptId = found.deptId;
+                      }
+                    }
+                    apecAssigneesList.push({
+                      id: emp.id,
+                      full_name: empName,
+                      avatar_url: emp.avatar,
+                      department_name: eDeptName,
+                      department_id: eDeptId,
+                      ea_id: assign.id,
+                    });
+                  }
+                }
+              });
+            }
+
+            if (apecAssigneesList.length === 0 && t.employee) {
+              const emp = t.employee;
+              const empName = emp.fullname || emp.name || '';
+              let eDeptName = emp.department_name || (typeof emp.department === 'object' ? emp.department?.name : (typeof emp.department === 'string' ? emp.department : ''));
+              let eDeptId = emp.department_id || emp.department?.id;
+              if (!eDeptName && emp.id) {
+                const found = employeeDeptMap.get(String(emp.id)) || employeeDeptMap.get(empName.trim().toLowerCase());
+                if (found) {
+                  eDeptName = found.deptName;
+                  eDeptId = found.deptId;
+                }
               }
+              apecAssigneesList.push({
+                id: emp.id,
+                full_name: empName,
+                avatar_url: emp.avatar,
+                department_name: eDeptName,
+                department_id: eDeptId,
+              });
             }
 
-            if (!assigneeName && t.employee) {
-              assigneeName = t.employee.fullname || t.employee.name || '';
-              assigneeId = t.employee.id;
-              assigneeAvatar = t.employee.avatar;
-              deptName = t.employee.department_name || (typeof t.employee.department === 'object' ? t.employee.department?.name : (typeof t.employee.department === 'string' ? t.employee.department : ''));
-              deptId = t.employee.department_id || t.employee.department?.id;
-            }
+            const primaryAssignee = apecAssigneesList[0] || undefined;
+            const assigneeName = primaryAssignee?.full_name || '';
+            const assigneeId = primaryAssignee?.id;
+            const assigneeAvatar = primaryAssignee?.avatar_url;
 
-            // Tra cứu phòng ban chuẩn theo Nhân Sự từ employeeDeptMap
-            if (!deptName && assigneeId) {
-              const found = employeeDeptMap.get(String(assigneeId)) || employeeDeptMap.get(`apec_${assigneeId}`) || employeeDeptMap.get(`apec_emp_${assigneeId}`);
-              if (found) {
-                deptName = found.deptName;
-                deptId = found.deptId;
-              }
-            }
-            if (!deptName && assigneeName) {
-              const found = employeeDeptMap.get(assigneeName.trim().toLowerCase());
-              if (found) {
-                deptName = found.deptName;
-                deptId = found.deptId;
-              }
-            }
+            // Phân giải phòng ban đại diện cho task
+            let deptName = primaryAssignee?.department_name || '';
+            let deptId = primaryAssignee?.department_id;
 
-            // Fallback: Tra cứu theo dự án hoặc phòng ban trên task
             if (!deptName) {
               deptName = typeof t.department === 'object' ? t.department?.name : (t.department_name || t.project?.department_name || null);
               deptId = t.department_id || t.department?.id;
@@ -706,22 +784,88 @@ export default function DashboardPage() {
             let startDate = t.date_start || t.start_date || t.created_at || null;
             let dueDate = t.date_end || t.end_date || t.due_date || t.completed_date || t.finish_date || t.target_date || null;
 
-            if (Array.isArray(t.employee_assignments) && t.employee_assignments.length > 0) {
-              for (const ea of t.employee_assignments) {
-                if (!dueDate && (ea.completed_date || ea.date_end || ea.end_date || ea.due_date)) {
-                  dueDate = ea.completed_date || ea.date_end || ea.end_date || ea.due_date;
+            if (ea.length > 0) {
+              for (const assign of ea) {
+                if (!dueDate && (assign.completed_date || assign.date_end || assign.end_date || assign.due_date)) {
+                  dueDate = assign.completed_date || assign.date_end || assign.end_date || assign.due_date;
                 }
-                if (!startDate && (ea.date_start || ea.start_date)) {
-                  startDate = ea.date_start || ea.start_date;
+                if (!startDate && (assign.date_start || assign.start_date)) {
+                  startDate = assign.date_start || assign.start_date;
                 }
               }
             }
 
-            if (!dueDate && Array.isArray(t.subtasks) && t.subtasks.length > 0) {
-              for (const sub of t.subtasks) {
-                const subDate = sub.date_end || sub.end_date || sub.due_date || sub.completed_date;
-                if (subDate) {
-                  dueDate = subDate;
+            // Trích xuất TOÀN BỘ CÔNG VIỆC CON (Subtasks) từ t.subtasks và ea.subtasks
+            const subtasksMap = new Map<string, any>();
+
+            if (Array.isArray(t.subtasks)) {
+              t.subtasks.forEach((st: any, idx: number) => {
+                const stId = String(st.id || `sub_${t.id}_${idx}`);
+                const isSubDone = Boolean(st.checked || st.status?.id === 4 || st.status === 'done' || String(st.status?.name || '').toLowerCase().includes('hoàn thành'));
+                const subProc = Number(st.process ?? st.progress ?? (isSubDone ? 100 : 0));
+                subtasksMap.set(stId, {
+                  id: stId,
+                  raw_id: st.id,
+                  title: st.name || st.title || `Công việc con #${idx + 1}`,
+                  status: isSubDone ? 'done' : (subProc > 0 || st.status?.id === 2 ? 'in_progress' : 'todo'),
+                  progress: subProc,
+                  process: subProc,
+                  checked: isSubDone,
+                  assignee: st.employee ? {
+                    id: st.employee.id,
+                    full_name: st.employee.fullname || st.employee.name,
+                    avatar_url: st.employee.avatar
+                  } : primaryAssignee,
+                  start_date: st.date_start || st.start_date || null,
+                  due_date: st.date_end || st.end_date || st.due_date || st.completed_date || null,
+                  task_id: t.id
+                });
+              });
+            }
+
+            if (ea.length > 0) {
+              ea.forEach((assign: any) => {
+                const eaEmp = assign.employee;
+                const eaAssignee = eaEmp ? {
+                  id: eaEmp.id,
+                  full_name: eaEmp.fullname || eaEmp.name,
+                  avatar_url: eaEmp.avatar
+                } : primaryAssignee;
+
+                if (Array.isArray(assign.subtasks) && assign.subtasks.length > 0) {
+                  assign.subtasks.forEach((st: any, idx: number) => {
+                    const stId = String(st.id || `ea_sub_${assign.id}_${idx}`);
+                    const isSubDone = Boolean(st.checked || st.status?.id === 4 || st.status === 'done' || String(st.status?.name || '').toLowerCase().includes('hoàn thành'));
+                    const subProc = Number(st.process ?? st.progress ?? (isSubDone ? 100 : 0));
+                    subtasksMap.set(stId, {
+                      id: stId,
+                      raw_id: st.id,
+                      title: st.name || st.title || `Công việc con #${idx + 1}`,
+                      status: isSubDone ? 'done' : (subProc > 0 || st.status?.id === 2 ? 'in_progress' : 'todo'),
+                      progress: subProc,
+                      process: subProc,
+                      checked: isSubDone,
+                      assignee: st.employee ? {
+                        id: st.employee.id,
+                        full_name: st.employee.fullname || st.employee.name,
+                        avatar_url: st.employee.avatar
+                      } : eaAssignee,
+                      start_date: st.date_start || st.start_date || assign.date_start || null,
+                      due_date: st.date_end || st.end_date || st.due_date || st.completed_date || assign.date_end || assign.due_date || null,
+                      ea_id: assign.id,
+                      task_id: t.id
+                    });
+                  });
+                }
+              });
+            }
+
+            const allSubtasks = Array.from(subtasksMap.values());
+
+            if (!dueDate && allSubtasks.length > 0) {
+              for (const sub of allSubtasks) {
+                if (sub.due_date) {
+                  dueDate = sub.due_date;
                   break;
                 }
               }
@@ -741,18 +885,21 @@ export default function DashboardPage() {
               department_id: deptId,
               department_name: deptName,
               checklist_title: apecChecklistType,
-              assignee: assigneeName ? {
+              assignee: primaryAssignee ? {
                 id: assigneeId,
                 full_name: assigneeName,
                 avatar_url: assigneeAvatar
               } : undefined,
+              assignees: apecAssigneesList,
               start_date: startDate,
               due_date: dueDate,
               progress: parentProcess,
               status: resolvedStatus,
               priority: (t.priority?.name?.toLowerCase()?.includes('cao') ? 'high' : 'medium') as any,
               source: 'apec' as const,
-              employee_assignments: t.employee_assignments || []
+              employee_assignments: t.employee_assignments || [],
+              subtasks: allSubtasks,
+              task_type: apecAssigneesList.length > 1 ? 'shared' : (apecAssigneesList.length === 1 ? 'personal' : 'shared'),
             };
           });
         }

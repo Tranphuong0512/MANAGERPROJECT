@@ -12,53 +12,29 @@ ON CONFLICT (name) DO UPDATE SET
   description = EXCLUDED.description,
   category = EXCLUDED.category;
 
--- 2. Gán permissions cho các Vai trò chuẩn
-DO $$
-DECLARE
-  owner_role UUID;
-  manager_role UUID;
-  team_lead_role UUID;
-  member_role UUID;
-  guest_role UUID;
-BEGIN
-  SELECT id INTO owner_role FROM user_roles WHERE name = 'owner';
-  SELECT id INTO manager_role FROM user_roles WHERE name = 'manager';
-  SELECT id INTO team_lead_role FROM user_roles WHERE name = 'team_lead';
-  SELECT id INTO member_role FROM user_roles WHERE name = 'member';
-  SELECT id INTO guest_role FROM user_roles WHERE name = 'guest';
+-- 2. Gán quyền cho Vai trò: Owner & Manager (Toàn quyền Overview)
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM user_roles r
+CROSS JOIN permissions p
+WHERE p.category = 'overview'
+  AND r.name IN ('owner', 'manager')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
 
-  -- Owner: Toàn quyền module Tổng quan
-  IF owner_role IS NOT NULL THEN
-    INSERT INTO role_permissions (role_id, permission_id)
-    SELECT owner_role, id FROM permissions WHERE category = 'overview'
-    ON CONFLICT DO NOTHING;
-  END IF;
+-- 3. Gán quyền cho Vai trò: Team Lead (Xem, Duyệt & Xuất báo cáo)
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM user_roles r
+CROSS JOIN permissions p
+WHERE p.name IN ('view_overview', 'approve_overview', 'export_overview')
+  AND r.name = 'team_lead'
+ON CONFLICT (role_id, permission_id) DO NOTHING;
 
-  -- Manager: Toàn quyền module Tổng quan
-  IF manager_role IS NOT NULL THEN
-    INSERT INTO role_permissions (role_id, permission_id)
-    SELECT manager_role, id FROM permissions WHERE category = 'overview'
-    ON CONFLICT DO NOTHING;
-  END IF;
-
-  -- Team Lead: Xem & Duyệt công việc
-  IF team_lead_role IS NOT NULL THEN
-    INSERT INTO role_permissions (role_id, permission_id)
-    SELECT team_lead_role, id FROM permissions WHERE name IN ('view_overview', 'approve_overview', 'export_overview')
-    ON CONFLICT DO NOTHING;
-  END IF;
-
-  -- Member: Xem phân hệ tổng quan
-  IF member_role IS NOT NULL THEN
-    INSERT INTO role_permissions (role_id, permission_id)
-    SELECT member_role, id FROM permissions WHERE name IN ('view_overview')
-    ON CONFLICT DO NOTHING;
-  END IF;
-
-  -- Guest: Xem phân hệ tổng quan
-  IF guest_role IS NOT NULL THEN
-    INSERT INTO role_permissions (role_id, permission_id)
-    SELECT guest_role, id FROM permissions WHERE name IN ('view_overview')
-    ON CONFLICT DO NOTHING;
-  END IF;
-END $$;
+-- 4. Gán quyền cho Vai trò: Member & Guest (Xem phân hệ tổng quan)
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM user_roles r
+CROSS JOIN permissions p
+WHERE p.name = 'view_overview'
+  AND r.name IN ('member', 'guest')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
