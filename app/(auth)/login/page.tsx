@@ -4,9 +4,30 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
-import { Eye, EyeOff, ShieldCheck, KeyRound, Laptop } from 'lucide-react'
+import { Eye, EyeOff, ShieldCheck, Laptop } from 'lucide-react'
 
 const STORAGE_KEY = 'nix_device_saved_credentials'
+const COOKIE_KEY = 'nix_saved_auth'
+
+// Helper: Đọc cookie theo tên
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(new RegExp('(^|;\\s*)(' + name + ')=([^;]*)'))
+  return match ? decodeURIComponent(match[3]) : null
+}
+
+// Helper: Ghi cookie lưu lâu dài
+function setCookie(name: string, value: string, days: number = 365) {
+  if (typeof document === 'undefined') return
+  const expires = new Date(Date.now() + days * 864e5).toUTCString()
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`
+}
+
+// Helper: Xóa cookie
+function deleteCookie(name: string) {
+  if (typeof document === 'undefined') return
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -18,51 +39,94 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [hasSavedOnDevice, setHasSavedOnDevice] = useState(false)
 
-  // Khởi tạo: Đọc thông tin đăng nhập đã lưu riêng trên thiết bị này (nếu người dùng đã bật nhớ mật khẩu)
+  // Khởi tạo: Đọc thông tin đăng nhập đã lưu riêng trên máy này
   useEffect(() => {
-    try {
-      const savedDataRaw = localStorage.getItem(STORAGE_KEY)
-      if (savedDataRaw) {
-        try {
-          const decoded = JSON.parse(decodeURIComponent(escape(atob(savedDataRaw))))
-          if (decoded && decoded.remember) {
-            if (decoded.email) setEmail(decoded.email)
-            if (decoded.password) setPassword(decoded.password)
-            setRememberMe(true)
-            setHasSavedOnDevice(true)
-            return
-          }
-        } catch {
-          // Fallback parsing nếu dạng JSON thuần
-          const parsed = JSON.parse(savedDataRaw)
-          if (parsed && parsed.remember) {
-            if (parsed.email) setEmail(parsed.email)
-            if (parsed.password) setPassword(parsed.password)
+    const loadSavedCredentials = async () => {
+      try {
+        // 1. Ưu tiên 1: Đọc qua Electron IPC (Lưu trực tiếp vào userData của máy tính cài đặt)
+        if (typeof window !== 'undefined' && (window as any).electron?.getSavedCredentials) {
+          const electronCreds = await (window as any).electron.getSavedCredentials()
+          if (electronCreds && electronCreds.remember) {
+            if (electronCreds.email) setEmail(electronCreds.email)
+            if (electronCreds.password) setPassword(electronCreds.password)
             setRememberMe(true)
             setHasSavedOnDevice(true)
             return
           }
         }
-      }
 
-      // Fallback phiên bản cũ
-      const savedEmail = localStorage.getItem('nix_remember_email')
-      const savedRemember = localStorage.getItem('nix_remember_me')
-      if (savedRemember === 'true' && savedEmail) {
-        setEmail(savedEmail)
-        setRememberMe(true)
+        // 2. Ưu tiên 2: Đọc qua LocalStorage
+        const savedDataRaw = localStorage.getItem(STORAGE_KEY)
+        if (savedDataRaw) {
+          try {
+            const parsed = JSON.parse(savedDataRaw)
+            if (parsed && parsed.remember) {
+              if (parsed.email) setEmail(parsed.email)
+              if (parsed.password) setPassword(parsed.password)
+              setRememberMe(true)
+              setHasSavedOnDevice(true)
+              return
+            }
+          } catch {
+            try {
+              const decoded = JSON.parse(decodeURIComponent(escape(atob(savedDataRaw))))
+              if (decoded && decoded.remember) {
+                if (decoded.email) setEmail(decoded.email)
+                if (decoded.password) setPassword(decoded.password)
+                setRememberMe(true)
+                setHasSavedOnDevice(true)
+                return
+              }
+            } catch {}
+          }
+        }
+
+        // 3. Ưu tiên 3: Đọc qua Cookie dự phòng
+        const cookieDataRaw = getCookie(COOKIE_KEY)
+        if (cookieDataRaw) {
+          try {
+            const parsedCookie = JSON.parse(cookieDataRaw)
+            if (parsedCookie && parsedCookie.remember) {
+              if (parsedCookie.email) setEmail(parsedCookie.email)
+              if (parsedCookie.password) setPassword(parsedCookie.password)
+              setRememberMe(true)
+              setHasSavedOnDevice(true)
+              return
+            }
+          } catch {}
+        }
+
+        // 4. Fallback phiên bản cũ
+        const savedEmail = localStorage.getItem('nix_remember_email')
+        const savedRemember = localStorage.getItem('nix_remember_me')
+        if (savedRemember === 'true' && savedEmail) {
+          setEmail(savedEmail)
+          setRememberMe(true)
+        }
+      } catch (e) {
+        console.warn('Lỗi đọc thông tin đăng nhập đã lưu:', e)
       }
-    } catch (e) {
-      console.warn('Không thể đọc thông tin lưu trên máy:', e)
     }
+
+    loadSavedCredentials()
   }, [])
 
   // Xóa thông tin đã lưu trên thiết bị
-  const handleClearSavedOnDevice = () => {
+  const handleClearSavedOnDevice = async () => {
+    try {
+      if (typeof window !== 'undefined' && (window as any).electron?.clearSavedCredentials) {
+        await (window as any).electron.clearSavedCredentials()
+      }
+    } catch (e) {
+      console.warn('Electron clear error:', e)
+    }
+
     localStorage.removeItem(STORAGE_KEY)
     localStorage.removeItem('nix_remember_email')
     localStorage.removeItem('nix_remember_password')
     localStorage.removeItem('nix_remember_me')
+    deleteCookie(COOKIE_KEY)
+
     setEmail('')
     setPassword('')
     setRememberMe(false)
@@ -92,57 +156,46 @@ export default function LoginPage() {
 
       // Quản lý lưu mật khẩu dành riêng cho từng máy cài
       if (rememberMe) {
+        const payload = {
+          email: email.trim(),
+          password,
+          remember: true,
+          savedAt: new Date().toISOString()
+        }
+        const jsonStr = JSON.stringify(payload)
+
+        // 1. Lưu vào Electron native store (File trong userData của máy tính)
         try {
-          const payload = {
-            email: email.trim(),
-            password,
-            remember: true,
-            savedAt: new Date().toISOString()
+          if (typeof window !== 'undefined' && (window as any).electron?.saveCredentials) {
+            await (window as any).electron.saveCredentials(payload)
           }
-          const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
-          localStorage.setItem(STORAGE_KEY, encoded)
+        } catch (e) {
+          console.warn('Electron save error:', e)
+        }
+
+        // 2. Lưu vào LocalStorage
+        try {
+          localStorage.setItem(STORAGE_KEY, jsonStr)
           localStorage.setItem('nix_remember_email', email.trim())
           localStorage.setItem('nix_remember_me', 'true')
         } catch (e) {
-          console.warn('Lỗi lưu mật khẩu cục bộ:', e)
+          console.warn('LocalStorage save error:', e)
+        }
+
+        // 3. Lưu vào Cookie dự phòng (1 năm)
+        try {
+          setCookie(COOKIE_KEY, jsonStr, 365)
+        } catch (e) {
+          console.warn('Cookie save error:', e)
         }
       } else {
-        localStorage.removeItem(STORAGE_KEY)
-        localStorage.removeItem('nix_remember_email')
-        localStorage.removeItem('nix_remember_password')
-        localStorage.setItem('nix_remember_me', 'false')
+        // Nếu bỏ chọn lưu mật khẩu -> xóa toàn bộ khỏi máy
+        await handleClearSavedOnDevice()
       }
 
       router.push('/dashboard')
     } catch (err: any) {
       setError(err.message || 'Đã có lỗi xảy ra trong quá trình đăng nhập')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleGoogleLogin = async () => {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-        setError('Cơ sở dữ liệu chưa được cấu hình. Vui lòng liên hệ hỗ trợ.')
-        return
-      }
-
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback`,
-        },
-      })
-
-      if (error) {
-        setError(error.message)
-      }
-    } catch (err: any) {
-      setError(err.message || 'Đã có lỗi xảy ra')
     } finally {
       setIsLoading(false)
     }
@@ -166,7 +219,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleEmailLogin} className="space-y-4 mb-6">
+        <form onSubmit={handleEmailLogin} className="space-y-4 mb-4">
           <div>
             <label htmlFor="email" className="block text-xs font-bold text-slate-700 mb-1">
               Email đăng nhập
@@ -239,46 +292,11 @@ export default function LoginPage() {
           <Button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold py-2.5 rounded-xl shadow-md shadow-blue-500/20 transition-all text-xs"
+            className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold py-2.5 rounded-xl shadow-md shadow-blue-500/20 transition-all text-xs mt-2"
           >
             {isLoading ? 'Đang xác thực...' : 'Đăng nhập'}
           </Button>
         </form>
-
-        <div className="relative mb-5">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-200"></div>
-          </div>
-          <div className="relative flex justify-center text-xs">
-            <span className="px-2 bg-white text-slate-400 font-medium">Hoặc tiếp tục với</span>
-          </div>
-        </div>
-
-        <Button
-          onClick={handleGoogleLogin}
-          disabled={isLoading}
-          className="w-full bg-slate-50 hover:bg-slate-100 active:scale-[0.99] text-slate-700 font-semibold py-2.5 rounded-xl border border-slate-200 transition-all text-xs flex items-center justify-center gap-2"
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24">
-            <path
-              fill="#4285F4"
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-            />
-            <path
-              fill="#34A853"
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-            />
-            <path
-              fill="#FBBC05"
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-            />
-            <path
-              fill="#EA4335"
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-            />
-          </svg>
-          Đăng nhập bằng Google
-        </Button>
 
         <div className="mt-6 text-center text-[11px] text-slate-400">
           <span>NIX.AI • Bản quyền © 2026 Trần Phương</span>

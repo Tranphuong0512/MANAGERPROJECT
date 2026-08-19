@@ -1,7 +1,7 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, utilityProcess } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
-
+const fs = require('fs');
 const net = require('net');
 
 // Disable security warnings
@@ -10,28 +10,86 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 let mainWindow;
 let serverProcess;
 
+function checkPortAvailable(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', () => resolve(false));
+    server.once('listening', () => {
+      server.close(() => resolve(true));
+    });
+    server.listen(port, '127.0.0.1');
+  });
+}
+
 function getFreePort() {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
     server.unref();
     server.on('error', reject);
-    server.listen(0, () => {
+    server.listen(0, '127.0.0.1', () => {
       const port = server.address().port;
       server.close(() => resolve(port));
     });
   });
 }
 
-const { utilityProcess } = require('electron');
+async function getPreferredPort() {
+  const preferredPort = 3128;
+  const isAvail = await checkPortAvailable(preferredPort);
+  if (isAvail) return preferredPort;
+  return await getFreePort();
+}
 
 function getAppPath(relativePath) {
   return path.join(__dirname, relativePath);
 }
 
+function getCredentialsFilePath() {
+  return path.join(app.getPath('userData'), 'nix_saved_auth.json');
+}
+
+// IPC Handler: Lưu thông tin đăng nhập dành riêng cho từng máy cài
+ipcMain.handle('get-saved-credentials', () => {
+  try {
+    const credPath = getCredentialsFilePath();
+    if (fs.existsSync(credPath)) {
+      const data = fs.readFileSync(credPath, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (e) {
+    console.error('Error reading saved credentials:', e);
+  }
+  return null;
+});
+
+ipcMain.handle('save-credentials', (_, credentials) => {
+  try {
+    const credPath = getCredentialsFilePath();
+    fs.writeFileSync(credPath, JSON.stringify(credentials), 'utf8');
+    return true;
+  } catch (e) {
+    console.error('Error saving credentials:', e);
+    return false;
+  }
+});
+
+ipcMain.handle('clear-saved-credentials', () => {
+  try {
+    const credPath = getCredentialsFilePath();
+    if (fs.existsSync(credPath)) {
+      fs.unlinkSync(credPath);
+    }
+    return true;
+  } catch (e) {
+    console.error('Error clearing saved credentials:', e);
+    return false;
+  }
+});
+
 function loadEnvVariables() {
   try {
     const envPath = getAppPath('.env.local');
-    const fs = require('fs');
     if (fs.existsSync(envPath)) {
       require('dotenv').config({ path: envPath });
       console.log('Loaded .env.local from:', envPath);
@@ -91,7 +149,7 @@ function startNextServer(port) {
 
 async function createWindow() {
   try {
-    const port = await getFreePort();
+    const port = await getPreferredPort();
     console.log(`Starting Next.js server on port ${port}...`);
     await startNextServer(port);
     console.log(`> Server ready at http://127.0.0.1:${port}`);
