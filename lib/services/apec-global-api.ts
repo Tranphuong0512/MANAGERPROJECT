@@ -345,55 +345,84 @@ export async function fetchFromApecGlobal<T = any>(
 }
 
 /**
+ * Chuẩn hóa timestamp của APEC:
+ * Server APEC lưu trữ theo giờ hệ thống (UTC-7) và xuất chuỗi ISO có đuôi 'Z'.
+ * Bù +7 giờ để khôi phục đúng mốc thời gian UTC thực tế khi người dùng tạo/sửa ở Việt Nam.
+ */
+export function normalizeApecTimestamps<T = any>(item: T): T {
+  if (!item || typeof item !== 'object') return item;
+  const clone: any = { ...item };
+  
+  if (typeof clone.created_at === 'string' && clone.created_at.includes('Z')) {
+    const d = new Date(clone.created_at);
+    if (!isNaN(d.getTime())) {
+      clone.created_at = new Date(d.getTime() + 7 * 3600 * 1000).toISOString();
+    }
+  }
+  if (typeof clone.updated_at === 'string' && clone.updated_at.includes('Z')) {
+    const d = new Date(clone.updated_at);
+    if (!isNaN(d.getTime())) {
+      clone.updated_at = new Date(d.getTime() + 7 * 3600 * 1000).toISOString();
+    }
+  }
+
+  if (Array.isArray(clone.employee_assignments)) {
+    clone.employee_assignments = clone.employee_assignments.map((ea: any) => normalizeApecTimestamps(ea));
+  }
+  if (Array.isArray(clone.subtasks)) {
+    clone.subtasks = clone.subtasks.map((st: any) => normalizeApecTimestamps(st));
+  }
+
+  return clone as T;
+}
+
+/**
  * Trích xuất danh sách mảng từ Response của APEC GLOBAL
  */
 export function extractApecArray<T = any>(responseData: any): T[] {
   if (!responseData) return [];
-  if (Array.isArray(responseData)) return responseData;
-  if (Array.isArray(responseData.data)) return responseData.data;
-  if (Array.isArray(responseData.result)) return responseData.result;
-  if (Array.isArray(responseData.items)) return responseData.items;
-  if (Array.isArray(responseData.list)) return responseData.list;
-  if (Array.isArray(responseData.employees)) return responseData.employees;
-  if (Array.isArray(responseData.tasks)) return responseData.tasks;
-  if (Array.isArray(responseData.jobs)) return responseData.jobs;
-  if (Array.isArray(responseData.companies)) return responseData.companies;
-  if (Array.isArray(responseData.projects)) return responseData.projects;
-  if (Array.isArray(responseData.departments)) return responseData.departments;
-  if (Array.isArray(responseData.task_types)) return responseData.task_types;
-  if (Array.isArray(responseData.types)) return responseData.types;
-  if (Array.isArray(responseData.checklists)) return responseData.checklists;
-
-  // Nếu data là object (ví dụ: { data: { employees: [...] } } hoặc { data: { tasks: [...] } } hoặc { data: { jobs: [...] } })
-  if (responseData.data && typeof responseData.data === 'object') {
+  let raw: any[] = [];
+  if (Array.isArray(responseData)) raw = responseData;
+  else if (Array.isArray(responseData.data)) raw = responseData.data;
+  else if (Array.isArray(responseData.result)) raw = responseData.result;
+  else if (Array.isArray(responseData.items)) raw = responseData.items;
+  else if (Array.isArray(responseData.list)) raw = responseData.list;
+  else if (Array.isArray(responseData.employees)) raw = responseData.employees;
+  else if (Array.isArray(responseData.tasks)) raw = responseData.tasks;
+  else if (Array.isArray(responseData.jobs)) raw = responseData.jobs;
+  else if (Array.isArray(responseData.companies)) raw = responseData.companies;
+  else if (Array.isArray(responseData.projects)) raw = responseData.projects;
+  else if (Array.isArray(responseData.departments)) raw = responseData.departments;
+  else if (Array.isArray(responseData.task_types)) raw = responseData.task_types;
+  else if (Array.isArray(responseData.types)) raw = responseData.types;
+  else if (Array.isArray(responseData.checklists)) raw = responseData.checklists;
+  else if (responseData.data && typeof responseData.data === 'object') {
     const obj = responseData.data;
-    if (Array.isArray(obj.employees)) return obj.employees;
-    if (Array.isArray(obj.tasks)) return obj.tasks;
-    if (Array.isArray(obj.jobs)) return obj.jobs;
-    if (Array.isArray(obj.companies)) return obj.companies;
-    if (Array.isArray(obj.projects)) return obj.projects;
-    if (Array.isArray(obj.departments)) return obj.departments;
-    if (Array.isArray(obj.task_types)) return obj.task_types;
-    if (Array.isArray(obj.types)) return obj.types;
-    if (Array.isArray(obj.checklists)) return obj.checklists;
-    if (Array.isArray(obj.items)) return obj.items;
-    if (Array.isArray(obj.list)) return obj.list;
-    for (const val of Object.values(obj)) {
-      if (Array.isArray(val)) return val;
+    if (Array.isArray(obj.employees)) raw = obj.employees;
+    else if (Array.isArray(obj.tasks)) raw = obj.tasks;
+    else if (Array.isArray(obj.jobs)) raw = obj.jobs;
+    else if (Array.isArray(obj.companies)) raw = obj.companies;
+    else if (Array.isArray(obj.projects)) raw = obj.projects;
+    else if (Array.isArray(obj.departments)) raw = obj.departments;
+    else if (Array.isArray(obj.task_types)) raw = obj.task_types;
+    else if (Array.isArray(obj.types)) raw = obj.types;
+    else if (Array.isArray(obj.checklists)) raw = obj.checklists;
+    else if (Array.isArray(obj.items)) raw = obj.items;
+    else if (Array.isArray(obj.list)) raw = obj.list;
+    else {
+      for (const val of Object.values(obj)) {
+        if (Array.isArray(val)) { raw = val; break; }
+      }
     }
-  }
-
-  // Nếu responseData là object chứa một mảng con bất kỳ
-  if (typeof responseData === 'object') {
+  } else if (typeof responseData === 'object') {
     for (const val of Object.values(responseData)) {
-      if (Array.isArray(val)) return val;
+      if (Array.isArray(val)) { raw = val; break; }
     }
+    if (raw.length === 0 && responseData.id) raw = [responseData];
+    else if (raw.length === 0 && responseData.data?.id) raw = [responseData.data];
   }
 
-  // If a single item is returned as object
-  if (typeof responseData === 'object' && responseData.id) return [responseData];
-  if (typeof responseData.data === 'object' && responseData.data?.id) return [responseData.data];
-  return [];
+  return raw.map(normalizeApecTimestamps);
 }
 
 /**
@@ -401,13 +430,14 @@ export function extractApecArray<T = any>(responseData: any): T[] {
  */
 export function extractApecDetail<T = any>(responseData: any): T | null {
   if (!responseData) return null;
-  if (Array.isArray(responseData)) return responseData[0] || null;
-  if (responseData.data && typeof responseData.data === 'object') {
-    if (Array.isArray(responseData.data)) return responseData.data[0] || null;
-    return responseData.data;
-  }
-  if (typeof responseData === 'object') return responseData;
-  return null;
+  let raw: any = null;
+  if (Array.isArray(responseData)) raw = responseData[0] || null;
+  else if (responseData.data && typeof responseData.data === 'object') {
+    if (Array.isArray(responseData.data)) raw = responseData.data[0] || null;
+    else raw = responseData.data;
+  } else if (typeof responseData === 'object') raw = responseData;
+  
+  return raw ? normalizeApecTimestamps(raw) : null;
 }
 
 /**
