@@ -36,19 +36,11 @@ export function getVietnamDateString(dateInput?: string | Date | number | null):
   }
 
   try {
-    let d: Date
-    if (dateInput instanceof Date) {
-      d = dateInput
-    } else if (typeof dateInput === 'number') {
-      d = new Date(dateInput)
-    } else {
-      const s = String(dateInput).trim()
-      if (!s) return ''
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-      d = new Date(s)
-    }
+    const s = typeof dateInput === 'string' ? dateInput.trim() : ''
+    if (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) return s
 
-    if (isNaN(d.getTime())) return ''
+    const d = parseToVietnamDate(dateInput)
+    if (!d) return ''
 
     return new Intl.DateTimeFormat('en-CA', {
       timeZone: VN_TIMEZONE,
@@ -62,8 +54,8 @@ export function getVietnamDateString(dateInput?: string | Date | number | null):
 }
 
 /**
- * Parse bất kỳ chuỗi ngày / Date nào sang Date an toàn, tự động nhận diện và xử lý
- * chuỗi không có múi giờ từ APEC/MySQL để luôn neo đúng múi giờ Việt Nam (GMT+7).
+ * Parse bất kỳ chuỗi ngày / Date nào sang Date an toàn.
+ * Chuỗi datetime từ APEC / MySQL / Postgres được định dạng UTC, tự động chuyển về múi giờ Việt Nam (+7h).
  */
 export function parseToVietnamDate(dateInput?: string | Date | number | null): Date | null {
   if (!dateInput) return null
@@ -93,15 +85,15 @@ export function parseToVietnamDate(dateInput?: string | Date | number | null): D
     return new Date(Date.UTC(y, m - 1, d, 0, 0, 0) - 7 * 3600 * 1000)
   }
 
-  // 3. Naive datetime từ MySQL/APEC (YYYY-MM-DD HH:mm:ss hoặc YYYY-MM-DDTHH:mm:ss không có đuôi Z hay offset)
-  // Đây là thời gian đã nằm ở múi giờ VN -> Gắn tường minh +07:00 để trình duyệt/Node không bị double shift +7 tiếng
+  // 3. Chuỗi datetime từ MySQL/APEC (YYYY-MM-DD HH:mm:ss hoặc YYYY-MM-DDTHH:mm:ss không có đuôi Z hay offset)
+  // Backend database lưu theo UTC -> Gắn 'Z' để chuyển đổi sang giờ Việt Nam (+7 tiếng)
   if (/^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) {
-    const normalized = s.replace(' ', 'T') + '+07:00'
+    const normalized = s.replace(' ', 'T') + 'Z'
     const d = new Date(normalized)
     if (!isNaN(d.getTime())) return d
   }
 
-  // 4. Các định dạng chuẩn ISO khác (có 'Z' hoặc offset '+07:00')
+  // 4. Các định dạng chuẩn ISO khác (có 'Z' hoặc offset '+07:00' / '+00:00')
   const d = new Date(s)
   return isNaN(d.getTime()) ? null : d
 }

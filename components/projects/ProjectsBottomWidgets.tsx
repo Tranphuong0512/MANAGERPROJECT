@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useOrganization } from '@/components/providers/organization-provider'
-import { VN_TIMEZONE, getVietnamTimeAgo } from '@/lib/utils'
+import { VN_TIMEZONE, getVietnamTimeAgo, parseToVietnamDate, getVietnamDateString } from '@/lib/utils'
 
 export function ProjectsBottomWidgets() {
   const { activeOrganization } = useOrganization()
@@ -80,19 +80,18 @@ export function ProjectsBottomWidgets() {
 
   // Process Deadline
   const getWeekDeadlines = () => {
-    const now = new Date()
-    // Lấy mốc 0h00 hôm nay theo giờ VN
-    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: VN_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
-    const todayMidnight = new Date(`${todayStr}T00:00:00+07:00`)
+    const todayStr = getVietnamDateString()
+    const todayMidnight = parseToVietnamDate(`${todayStr}T00:00:00+07:00`) || new Date()
+    todayMidnight.setHours(0, 0, 0, 0)
     const nextWeek = new Date(todayMidnight.getTime() + 7 * 24 * 60 * 60 * 1000)
     
     return tasks
       .filter(t => {
         if (!t.due_date) return false
-        const d = new Date(t.due_date)
-        return !isNaN(d.getTime()) && d >= todayMidnight && d <= nextWeek
+        const d = parseToVietnamDate(t.due_date)
+        return d && !isNaN(d.getTime()) && d >= todayMidnight && d <= nextWeek
       })
-      .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
+      .sort((a, b) => (parseToVietnamDate(a.due_date)?.getTime() || 0) - (parseToVietnamDate(b.due_date)?.getTime() || 0))
       .slice(0, 4)
   }
   const deadlineTasks = getWeekDeadlines()
@@ -101,8 +100,8 @@ export function ProjectsBottomWidgets() {
   const formatShortDate = (d: string) => {
     if (!d) return '--/--'
     try {
-      const date = new Date(d)
-      if (isNaN(date.getTime())) return '--/--'
+      const date = parseToVietnamDate(d)
+      if (!date || isNaN(date.getTime())) return '--/--'
       return new Intl.DateTimeFormat('en-GB', {
         timeZone: VN_TIMEZONE,
         day: '2-digit',
@@ -115,8 +114,8 @@ export function ProjectsBottomWidgets() {
   const getDayOfWeek = (d: string) => {
     if (!d) return ''
     try {
-      const date = new Date(d)
-      if (isNaN(date.getTime())) return ''
+      const date = parseToVietnamDate(d)
+      if (!date || isNaN(date.getTime())) return ''
       const dayFormatted = new Intl.DateTimeFormat('vi-VN', {
         timeZone: VN_TIMEZONE,
         weekday: 'short',

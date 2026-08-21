@@ -22,6 +22,7 @@ import type {
   WidgetTask,
   TaskPriority,
 } from './types'
+import { getVietnamDateString } from '@/lib/utils'
 
 import {
   resolveSupabaseTaskStatus,
@@ -103,8 +104,10 @@ export function normalizeSupabaseTasks(
         maps,
       })
 
-      const startDate = t.start_date || t.date_start || t.created_at || null
-      const dueDate = t.due_date || t.end_date || t.date_end || t.finish_date || t.completed_date || t.target_date || null
+      const startDate = getVietnamDateString(t.start_date || t.date_start || t.created_at) || null
+      let dueDate = getVietnamDateString(t.due_date || t.end_date || t.date_end || t.finish_date || t.completed_date || t.target_date) || null
+      if (startDate && dueDate && dueDate < startDate) dueDate = startDate
+      if (!dueDate && startDate) dueDate = startDate
       const subtasks = childrenMap.get(String(t.id)) || []
 
       return {
@@ -166,8 +169,10 @@ export function normalizeChecklistItems(
         maps,
       })
 
-      const startDate = t.start_date || t.date_start || t.created_at || null
-      const dueDate = t.end_date || t.due_date || t.date_end || t.completed_date || t.finish_date || null
+      const startDate = getVietnamDateString(t.start_date || t.date_start || t.created_at) || null
+      let dueDate = getVietnamDateString(t.end_date || t.due_date || t.date_end || t.completed_date || t.finish_date) || null
+      if (startDate && dueDate && dueDate < startDate) dueDate = startDate
+      if (!dueDate && startDate) dueDate = startDate
 
       return {
         id: t.id,
@@ -229,17 +234,19 @@ export function normalizeApecTasks(
     })
 
     // Resolve dates
-    let startDate: string | null = t.date_start || t.start_date || t.created_at || null
-    let dueDate: string | null = t.date_end || t.end_date || t.due_date || t.completed_date || t.finish_date || t.target_date || null
+    let startDate: string | null = getVietnamDateString(t.date_start || t.start_date || t.created_at) || null
+    let dueDate: string | null = getVietnamDateString(t.date_end || t.end_date || t.due_date || t.completed_date || t.finish_date || t.target_date) || null
 
     // Fallback dates from employee_assignments
     if (ea.length > 0) {
       for (const assign of ea) {
-        if (!dueDate && (assign.completed_date || assign.date_end || assign.end_date || assign.due_date)) {
-          dueDate = (assign.completed_date || assign.date_end || assign.end_date || assign.due_date) as string
+        if (!dueDate) {
+          const d = getVietnamDateString(assign.completed_date || assign.date_end || assign.end_date || assign.due_date)
+          if (d) dueDate = d
         }
-        if (!startDate && (assign.date_start || assign.start_date)) {
-          startDate = (assign.date_start || assign.start_date) as string
+        if (!startDate) {
+          const d = getVietnamDateString(assign.date_start || assign.start_date)
+          if (d) startDate = d
         }
       }
     }
@@ -250,7 +257,15 @@ export function normalizeApecTasks(
     // Fallback due_date from subtasks
     if (!dueDate && subtasks.length > 0) {
       const subWithDate = subtasks.find(s => s.due_date)
-      if (subWithDate) dueDate = subWithDate.due_date
+      if (subWithDate) dueDate = getVietnamDateString(subWithDate.due_date) || null
+    }
+
+    // Prevent invalid overdue anomaly where dueDate is before startDate
+    if (startDate && dueDate && dueDate < startDate) {
+      dueDate = startDate
+    }
+    if (!dueDate && startDate) {
+      dueDate = startDate
     }
 
     // Resolve checklist type

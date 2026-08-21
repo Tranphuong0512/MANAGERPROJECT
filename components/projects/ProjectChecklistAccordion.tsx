@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Plus, User, CalendarDays, Bug, Lightbulb } f
 import { supabase } from '@/lib/supabase/client'
 import { CreateChecklistDialog } from './CreateChecklistDialog'
 import { CreateChecklistItemDialog } from './CreateChecklistItemDialog'
+import { getVietnamDateString } from '@/lib/utils'
 
 interface ProjectChecklistAccordionProps {
   projectId: string
@@ -207,7 +208,7 @@ export function ProjectChecklistAccordion({ projectId, organizationId, onProgres
 
   const formatDateForInput = (isoString: string) => {
     if (!isoString) return ''
-    return isoString.split('T')[0]
+    return getVietnamDateString(isoString)
   }
 
   if (isLoading) {

@@ -9,6 +9,7 @@ import {
 import { z } from 'zod';
 import { getCachedOrFetch } from '@/lib/services/server-cache';
 import { isItemDeleted } from '@/lib/services/deleted-items-store';
+import { getVietnamDateString } from '@/lib/utils';
 
 // Phase 1 Schema Validation
 const isUuid = (str: any) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
@@ -576,13 +577,13 @@ export async function GET(
 
           const resolvedAssignees = hydratedAssignments.map((ha: any) => ha.hydrated_employee).filter(Boolean);
 
-          // Trích xuất hạn chót và ngày bắt đầu toàn diện từ Task, EA, Subtasks
-          let resolvedStartDate = t.date_start || t.start_date || t.created_at || null;
-          let resolvedEndDate = t.date_end || t.end_date || t.due_date || t.completed_date || t.finish_date || t.target_date || null;
+          // Trích xuất hạn chót và ngày bắt đầu toàn diện từ Task, EA, Subtasks (chuẩn múi giờ VN)
+          let resolvedStartDate = getVietnamDateString(t.date_start || t.start_date || t.created_at) || null;
+          let resolvedEndDate = getVietnamDateString(t.date_end || t.end_date || t.due_date || t.completed_date || t.finish_date || t.target_date) || null;
 
           if (!resolvedEndDate && Array.isArray(hydratedAssignments) && hydratedAssignments.length > 0) {
             for (const ha of hydratedAssignments) {
-              const d = ha.completed_date || ha.date_end || ha.end_date || ha.due_date;
+              const d = getVietnamDateString(ha.completed_date || ha.date_end || ha.end_date || ha.due_date);
               if (d) {
                 resolvedEndDate = d;
                 break;
@@ -592,7 +593,7 @@ export async function GET(
 
           if (!resolvedEndDate && Array.isArray(finalSubtasks) && finalSubtasks.length > 0) {
             for (const st of finalSubtasks) {
-              const d = st.completed_date || st.date_end || st.end_date || st.due_date;
+              const d = getVietnamDateString(st.completed_date || st.date_end || st.end_date || st.due_date);
               if (d) {
                 resolvedEndDate = d;
                 break;
@@ -602,12 +603,20 @@ export async function GET(
 
           if (!resolvedStartDate && Array.isArray(hydratedAssignments) && hydratedAssignments.length > 0) {
             for (const ha of hydratedAssignments) {
-              const d = ha.date_start || ha.start_date;
+              const d = getVietnamDateString(ha.date_start || ha.start_date);
               if (d) {
                 resolvedStartDate = d;
                 break;
               }
             }
+          }
+
+          // Ngăn ngừa lỗi hạn hoàn thành bị lùi về trước ngày bắt đầu gây báo quá hạn sai
+          if (resolvedStartDate && resolvedEndDate && resolvedEndDate < resolvedStartDate) {
+            resolvedEndDate = resolvedStartDate;
+          }
+          if (!resolvedEndDate && resolvedStartDate) {
+            resolvedEndDate = resolvedStartDate;
           }
 
           const taskNode = {

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { X } from 'lucide-react'
+import { getVietnamDateString } from '@/lib/utils'
 
 interface CreateTaskDialogProps {
   open: boolean
@@ -26,7 +27,7 @@ export function CreateTaskDialog({
     status: 'todo',
     priority: 'medium',
     assigned_to: '',
-    due_date: '',
+    due_date: getVietnamDateString(),
   })
 
   useEffect(() => {
@@ -90,7 +91,7 @@ export function CreateTaskDialog({
             status: formData.status,
             priority: formData.priority,
             assigned_to: formData.assigned_to || null,
-            due_date: formData.due_date || null,
+            due_date: getVietnamDateString(formData.due_date) || getVietnamDateString(),
             created_by: user.id,
           },
         ])
@@ -103,7 +104,7 @@ export function CreateTaskDialog({
         status: 'todo',
         priority: 'medium',
         assigned_to: '',
-        due_date: '',
+        due_date: getVietnamDateString(),
       })
       onOpenChange(false)
       onTaskCreated?.()

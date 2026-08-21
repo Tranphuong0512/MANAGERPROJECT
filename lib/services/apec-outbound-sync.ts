@@ -595,14 +595,19 @@ export async function syncTaskOutbound(
       ? taskData.employees.map(resolveNumericId).map(Number).filter(n => !isNaN(n) && n > 0)
       : (taskData.assignee_id ? [Number(resolveNumericId(taskData.assignee_id))].filter(n => !isNaN(n)) : [37]);
 
+    const sDate = getVietnamDateString(taskData.date_start || taskData.start_date) || getVietnamDateString();
+    let eDate = getVietnamDateString(taskData.date_end || taskData.end_date || taskData.due_date) || sDate;
+    if (eDate < sDate) eDate = sDate;
+
     body = {
       name: taskData.name || taskData.title || 'Công việc mới',
       title: taskData.title || taskData.name || 'Công việc mới',
       description: taskData.description || '',
-      date_start: taskData.date_start || taskData.start_date || getVietnamDateString(),
-      date_end: taskData.date_end || taskData.end_date || taskData.due_date || getVietnamDateString(),
-      start_date: taskData.date_start || taskData.start_date || getVietnamDateString(),
-      end_date: taskData.date_end || taskData.end_date || taskData.due_date || getVietnamDateString(),
+      date_start: sDate,
+      date_end: eDate,
+      start_date: sDate,
+      end_date: eDate,
+      due_date: eDate,
       type_task: resolvedTypeId,
       type_id: resolvedTypeId,
       checklist_id: resolvedTypeId,
@@ -669,6 +674,12 @@ export async function syncTaskOutbound(
       }
     }
 
+    const updateStartDate = taskData.date_start || taskData.start_date ? getVietnamDateString(taskData.date_start || taskData.start_date) : undefined;
+    let updateEndDate = taskData.date_end || taskData.end_date || taskData.due_date ? getVietnamDateString(taskData.date_end || taskData.end_date || taskData.due_date) : undefined;
+    if (updateStartDate && updateEndDate && updateEndDate < updateStartDate) {
+      updateEndDate = updateStartDate;
+    }
+
     body = {
       ...taskData,
       id: cleanId,
@@ -680,6 +691,15 @@ export async function syncTaskOutbound(
       target_value: targetVal,
       updated_at: new Date().toISOString(),
     };
+    if (updateStartDate) {
+      body.date_start = updateStartDate;
+      body.start_date = updateStartDate;
+    }
+    if (updateEndDate) {
+      body.date_end = updateEndDate;
+      body.end_date = updateEndDate;
+      body.due_date = updateEndDate;
+    }
     if (taskData.project_id !== undefined) body.project_id = resolveNumericId(taskData.project_id);
     if (taskData.type_id !== undefined) {
       body.type_id = resolveNumericId(taskData.type_id);

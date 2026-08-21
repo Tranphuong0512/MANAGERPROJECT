@@ -29,7 +29,7 @@ import {
   Tag
 } from 'lucide-react'
 import { showToast } from '@/utils/alert'
-import { formatVietnamDate } from '@/lib/utils'
+import { formatVietnamDate, parseToVietnamDate, getVietnamDateString } from '@/lib/utils'
 import { supabase } from '@/lib/supabase/client'
 import { usePermissions } from '@/hooks/usePermissions'
 
@@ -996,8 +996,17 @@ export function DepartmentTasksOverviewTable({
   }
 
   // Helper render thời gian hạn chót chi tiết & trực quan
-  const renderDeadlineBadge = (startDate?: string | null, dueDate?: string | null, isDone?: boolean) => {
-    if (!dueDate && !startDate) {
+  const renderDeadlineBadge = (startDateInput?: string | null, dueDateInput?: string | null, isDone?: boolean) => {
+    const sStr = getVietnamDateString(startDateInput) || null;
+    let dStr = getVietnamDateString(dueDateInput) || null;
+    if (sStr && dStr && dStr < sStr) {
+      dStr = sStr;
+    }
+    if (!dStr && sStr) {
+      dStr = sStr;
+    }
+
+    if (!dStr && !sStr) {
       return (
         <div className="flex flex-col text-[11px] text-slate-400">
           <span className="italic flex items-center gap-1">
@@ -1008,29 +1017,30 @@ export function DepartmentTasksOverviewTable({
       )
     }
 
-    const now = new Date()
-    now.setHours(0, 0, 0, 0)
-    let daysDiff: number | null = null
-    let isOverdue = false
-    let isToday = false
+    const todayStr = getVietnamDateString();
+    let daysDiff: number | null = null;
+    let isOverdue = false;
+    let isToday = false;
 
-    if (dueDate) {
-      const d = new Date(dueDate)
-      if (!isNaN(d.getTime())) {
-        d.setHours(0, 0, 0, 0)
-        const diffTime = d.getTime() - now.getTime()
-        daysDiff = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-        isToday = daysDiff === 0
-        isOverdue = daysDiff < 0
+    if (dStr) {
+      const dNow = parseToVietnamDate(todayStr);
+      const dDue = parseToVietnamDate(dStr);
+      if (dNow && dDue) {
+        dNow.setHours(0, 0, 0, 0);
+        dDue.setHours(0, 0, 0, 0);
+        const diffTime = dDue.getTime() - dNow.getTime();
+        daysDiff = Math.round(diffTime / (1000 * 60 * 60 * 24));
+        isToday = daysDiff === 0;
+        isOverdue = daysDiff < 0;
       }
     }
 
     return (
       <div className="flex flex-col gap-1 text-[11px]">
-        {dueDate ? (
+        {dStr ? (
           <div className="flex items-center gap-1.5 font-bold text-slate-800">
             <Calendar className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
-            <span>Hạn: {formatVietnamDate(dueDate)}</span>
+            <span>Hạn: {formatVietnamDate(dStr)}</span>
           </div>
         ) : (
           <div className="text-[11px] text-slate-400 italic">
@@ -1038,13 +1048,13 @@ export function DepartmentTasksOverviewTable({
           </div>
         )}
 
-        {startDate && (
+        {sStr && (
           <div className="text-[10px] text-slate-500 font-medium pl-5">
-            Bắt đầu: {formatVietnamDate(startDate)}
+            Bắt đầu: {formatVietnamDate(sStr)}
           </div>
         )}
 
-        {!isDone && dueDate && daysDiff !== null && (
+        {!isDone && dStr && daysDiff !== null && (
           <div className="pl-5">
             {isOverdue ? (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">

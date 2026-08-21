@@ -11,7 +11,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { CreateChecklistDialog } from '../CreateChecklistDialog'
 import { ChecklistItemDialog } from '../ChecklistItemDialog'
 import { ImportProjectDataDialog } from '../ImportProjectDataDialog'
-import { getVietnamMonthBounds } from '@/lib/utils'
+import { getVietnamMonthBounds, getVietnamDateString } from '@/lib/utils'
 import { usePermissions } from '@/hooks/usePermissions'
 import { customAlert, customConfirm } from '@/utils/alert'
 
@@ -323,7 +323,7 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
         <div className="w-28 shrink-0">
           {(() => {
             const itemDueDate = item.end_date || item.date_end || item.due_date || item.completed_date || (Array.isArray(item.employee_assignments) && item.employee_assignments.find((ea: any) => ea.completed_date || ea.end_date || ea.date_end)?.completed_date) || '';
-            const valStr = itemDueDate ? String(itemDueDate).split('T')[0] : '';
+            const valStr = itemDueDate ? getVietnamDateString(itemDueDate) : '';
             return (
               <input
                 type="date"
@@ -580,7 +580,7 @@ function SortableChecklistItem({ item, onStatusChange, onProgressChange, onDateC
                   <div className="w-28 shrink-0">
                     {(() => {
                       const subDueDate = sub.completed_date || sub.date_end || sub.end_date || sub.due_date || item.end_date || item.date_end || item.due_date || '';
-                      const valStr = subDueDate ? String(subDueDate).split('T')[0] : '';
+                      const valStr = subDueDate ? getVietnamDateString(subDueDate) : '';
                       return (
                         <input
                           type="date"
@@ -874,7 +874,12 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
     try {
       const mergedProcess = overrideFields.process !== undefined ? overrideFields.process : (overrideFields.progress !== undefined ? overrideFields.progress : (item.progress || item.process || 0));
       const mergedStatus = overrideFields.status || item.status;
-      
+      const sDate = getVietnamDateString(overrideFields.date_start || overrideFields.start_date || item.date_start || item.start_date || item.created_at) || getVietnamDateString();
+      let eDate = getVietnamDateString(overrideFields.date_end || overrideFields.end_date || overrideFields.due_date || item.date_end || item.end_date || item.due_date || sDate) || sDate;
+      if (eDate < sDate) {
+        eDate = sDate;
+      }
+
       const res = await fetch('/api/v1/apec-global/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -886,9 +891,11 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
           process: mergedProcess,
           progress: mergedProcess,
           is_completed: overrideFields.is_completed !== undefined ? overrideFields.is_completed : (item.is_completed || false),
-          date_end: overrideFields.date_end || item.end_date || item.due_date,
-          end_date: overrideFields.end_date || item.end_date || item.due_date,
-          due_date: overrideFields.due_date || item.end_date || item.due_date,
+          date_start: sDate,
+          start_date: sDate,
+          date_end: eDate,
+          end_date: eDate,
+          due_date: eDate,
           project_id: item.project_id || projectId,
           checklist_id: item.checklist_id || item.type_id,
           type_id: item.type_id || item.checklist_id,
@@ -960,9 +967,11 @@ export function ProjectChecklistTable({ projectId, organizationId, onProgressCha
                     process: mergedProcess,
                     progress: mergedProcess,
                     is_completed: overrideFields.is_completed !== undefined ? overrideFields.is_completed : (item.is_completed || false),
-                    date_end: overrideFields.date_end || item.end_date || item.due_date,
-                    end_date: overrideFields.end_date || item.end_date || item.due_date,
-                    due_date: overrideFields.due_date || item.end_date || item.due_date,
+                    date_start: sDate,
+                    start_date: sDate,
+                    date_end: eDate,
+                    end_date: eDate,
+                    due_date: eDate,
                     project_id: item.project_id || projectId,
                     checklist_id: item.checklist_id || item.type_id,
                     type_id: item.type_id || item.checklist_id,

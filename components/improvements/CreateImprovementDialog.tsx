@@ -260,6 +260,12 @@ export function CreateImprovementDialog({
       const cleanEmp = formData.assigned_to ? [Number(formData.assigned_to)].filter(n => !isNaN(n) && n > 0) : []
       const fallbackEmp = cleanEmp.length > 0 ? cleanEmp : (employees.length > 0 ? [Number(employees[0].id)].filter(n => !isNaN(n) && n > 0) : [37])
 
+      const sDate = getVietnamDateString(formData.start_date) || getVietnamDateString();
+      let eDate = getVietnamDateString(formData.end_date) || sDate;
+      if (eDate < sDate) {
+        eDate = sDate;
+      }
+
       const apecPayload = {
         id: taskId,
         name: formData.title,
@@ -270,9 +276,11 @@ export function CreateImprovementDialog({
         type_name: 'CẢI TIẾN & NÂNG CẤP',
         type_task: 'CẢI TIẾN & NÂNG CẤP',
         is_incident: false,
-        date_start: formData.start_date || new Date().toISOString().split("T")[0],
-        date_end: formData.end_date || new Date().toISOString().split("T")[0],
-        end_date: formData.end_date || null,
+        date_start: sDate,
+        start_date: sDate,
+        date_end: eDate,
+        end_date: eDate,
+        due_date: eDate,
         employees: fallbackEmp.length > 0 ? fallbackEmp : [37],
         assignee_id: formData.assigned_to || null,
         department_id: resolvedDepartmentId || null,

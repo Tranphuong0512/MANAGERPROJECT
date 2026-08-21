@@ -107,8 +107,8 @@ export function ChecklistItemDialog({
           description: '',
           department: '',
           assignee_ids: [],
-          start_date: '',
-          end_date: '',
+          start_date: getVietnamDateString(),
+          end_date: getVietnamDateString(),
           priority: 'medium',
           progress: 0,
           status: 'todo',
@@ -129,14 +129,22 @@ export function ChecklistItemDialog({
     try {
       if (!formData.title) throw new Error('Vui lòng nhập tên công việc')
 
+      const sDate = getVietnamDateString(formData.start_date) || getVietnamDateString();
+      let eDate = getVietnamDateString(formData.end_date) || sDate;
+      if (eDate < sDate) {
+        eDate = sDate;
+      }
+
       const targetChecklistId = selectedChecklistId || checklistId;
       const payload = {
         checklist_id: targetChecklistId,
         title: formData.title,
         description: formData.description,
         assignee_ids: formData.assignee_ids,
-        start_date: formData.start_date || null,
-        end_date: formData.end_date || null,
+        start_date: sDate,
+        end_date: eDate,
+        date_start: sDate,
+        date_end: eDate,
         priority: formData.priority,
         progress: Number(formData.progress),
         status: Number(formData.progress) === 100 ? 'done' : formData.status,
@@ -174,8 +182,10 @@ export function ChecklistItemDialog({
               target_value: Number(formData.target_value || 0),
               min_count_reject: Number(formData.min_count_reject || 2),
               max_count_reject: Number(formData.max_count_reject || 3),
-              date_start: payload.start_date,
-              date_end: payload.end_date,
+              date_start: sDate,
+              start_date: sDate,
+              date_end: eDate,
+              end_date: eDate,
               process: payload.progress,
               project_id: projectId ? String(projectId).replace(/^apec_prj_/, '').replace(/^apec_/, '') : undefined
             }),
@@ -220,8 +230,10 @@ export function ChecklistItemDialog({
             body: JSON.stringify({
               name: payload.title,
               description: formData.description || '',
-              date_start: payload.start_date || getVietnamDateString(),
-              date_end: payload.end_date || getVietnamDateString(),
+              date_start: sDate,
+              start_date: sDate,
+              date_end: eDate,
+              end_date: eDate,
               type_task: cleanChecklistId,
               project_id: cleanProjectId,
               company_id: cleanCompanyId,
