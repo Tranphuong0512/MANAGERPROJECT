@@ -193,9 +193,12 @@ export function DepartmentTasksOverviewTable({
   // Helper: Kiểm tra khớp trạng thái dropdown
   const isMatchDropdownStatus = (t: TaskOverviewItem, statusVal: string) => {
     if (statusVal === 'all') return true;
-    const now = new Date();
     if (statusVal === 'review') return t.status === 'review';
-    if (statusVal === 'overdue') return Boolean(t.due_date && t.status !== 'done' && t.status !== 'review' && new Date(t.due_date) < now);
+    if (statusVal === 'overdue') {
+      const todayStr = getVietnamDateString();
+      const dStr = t.due_date ? getVietnamDateString(t.due_date) : null;
+      return Boolean(dStr && dStr < todayStr && t.status !== 'done' && t.status !== 'review');
+    }
     if (statusVal === 'done') return t.status === 'done';
     return t.status === statusVal;
   };
@@ -290,7 +293,7 @@ export function DepartmentTasksOverviewTable({
 
   // Thống kê nhanh theo trạng thái TRONG PHẠM VI BỘ LỌC ĐANG CHỌN (Phòng ban, Dự án, Loại Checklist, Tìm kiếm)
   const stats = useMemo(() => {
-    const now = new Date()
+    const todayStr = getVietnamDateString()
     let reviewCount = 0
     let inProgressCount = 0
     let doneCount = 0
@@ -318,7 +321,8 @@ export function DepartmentTasksOverviewTable({
       }
 
       if (t.due_date && t.status !== 'done' && t.status !== 'review') {
-        if (new Date(t.due_date) < now) {
+        const dStr = getVietnamDateString(t.due_date)
+        if (dStr && dStr < todayStr) {
           overdueCount++
         }
       }
@@ -336,7 +340,7 @@ export function DepartmentTasksOverviewTable({
 
   // Lọc danh sách công việc theo tất cả điều kiện lọc
   const filteredTasks = useMemo(() => {
-    const now = new Date()
+    const todayStr = getVietnamDateString()
     return tasks.filter(t => {
       // 1. Khớp phòng ban
       if (!isMatchDept(t, selectedDepartment)) return false
@@ -358,7 +362,8 @@ export function DepartmentTasksOverviewTable({
       } else if (activeTab === 'done') {
         if (t.status !== 'done') return false
       } else if (activeTab === 'overdue') {
-        const isOverdue = t.due_date && t.status !== 'done' && t.status !== 'review' && new Date(t.due_date) < now
+        const dStr = t.due_date ? getVietnamDateString(t.due_date) : null
+        const isOverdue = Boolean(dStr && dStr < todayStr && t.status !== 'done' && t.status !== 'review')
         if (!isOverdue) return false
       }
 
@@ -367,7 +372,8 @@ export function DepartmentTasksOverviewTable({
         if (selectedStatus === 'review') {
           if (t.status !== 'review') return false
         } else if (selectedStatus === 'overdue') {
-          const isOverdue = t.due_date && t.status !== 'done' && t.status !== 'review' && new Date(t.due_date) < now
+          const dStr = t.due_date ? getVietnamDateString(t.due_date) : null
+          const isOverdue = Boolean(dStr && dStr < todayStr && t.status !== 'done' && t.status !== 'review')
           if (!isOverdue) return false
         } else if (selectedStatus === 'done') {
           if (t.status !== 'done') return false
