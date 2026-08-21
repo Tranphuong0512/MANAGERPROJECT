@@ -221,18 +221,6 @@ app.whenReady().then(async () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('update-downloaded', info);
       }
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'Nâng cấp phần mềm hoàn tất',
-        message: `Đã tự động tải hoàn tất phiên bản mới (v${info?.version || ''}).\nỨng dụng sẽ tự động áp dụng bản nâng cấp và khởi động lại ngay bây giờ.`,
-        buttons: ['Khởi động lại ngay']
-      }).then(() => {
-        setImmediate(() => {
-          autoUpdater.quitAndInstall(false, true);
-        });
-      }).catch(() => {
-        autoUpdater.quitAndInstall(false, true);
-      });
     });
 
     ipcMain.on('quit-and-install', () => {
