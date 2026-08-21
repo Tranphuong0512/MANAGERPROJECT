@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import { ExternalLink, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { formatVietnamDate, formatVietnamTime } from '@/lib/utils'
+import { formatVietnamDate, formatVietnamTime, parseToVietnamDate } from '@/lib/utils'
 
 interface ImprovementsTableProps {
   improvements: any[]
@@ -19,7 +19,7 @@ export function ImprovementsTable({ improvements, members = [], onImprovementCli
   const router = useRouter()
 
   const displayImprovements = useMemo(() => {
-    return [...improvements].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+    return [...improvements].sort((a, b) => (parseToVietnamDate(b.created_at)?.getTime() || 0) - (parseToVietnamDate(a.created_at)?.getTime() || 0))
   }, [improvements])
 
   const getImpactStyle = (s: string) => {
@@ -131,9 +131,11 @@ export function ImprovementsTable({ improvements, members = [], onImprovementCli
                   <div className="text-xs text-slate-700 font-semibold">
                     {formatVietnamDate(imp.created_at)}
                   </div>
-                  <div className="text-[11px] text-slate-400 font-medium">
-                    {formatVietnamTime(imp.created_at)}
-                  </div>
+                  {formatVietnamTime(imp.created_at) && (
+                    <div className="text-[11px] text-slate-400 font-medium">
+                      {formatVietnamTime(imp.created_at)}
+                    </div>
+                  )}
                 </td>
                 <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
                   <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

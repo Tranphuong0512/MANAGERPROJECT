@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { X, Calendar, User, FolderOpen, Lightbulb, Edit2, Save } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { customAlert, customConfirm } from '@/utils/alert'
+import { formatVietnamDateTime } from '@/lib/utils'
 
 interface ImprovementSlideOverProps {
   improvement: any | null
@@ -355,7 +356,7 @@ export function ImprovementSlideOver({ improvement: initialImprovement, members 
                   <Calendar className="w-4 h-4" />
                   <span className="font-medium">Thời gian</span>
                 </div>
-                <span className="font-semibold text-slate-800 flex-1">{improvement.created_at ? new Date(improvement.created_at).toLocaleString('vi-VN') : ''}</span>
+                <span className="font-semibold text-slate-800 flex-1">{formatVietnamDateTime(improvement.created_at)}</span>
               </div>
 
               {isEditing && (

@@ -56,7 +56,7 @@ export function mergeIncidents(
       id: String(inc.id),
       title: inc.title || '',
       status: currentStatus,
-      created_at: inc.created_at || new Date().toISOString(),
+      created_at: inc.created_at || apecTask?.created_at || apecTask?.date_start || apecTask?.start_date || '',
     } as NormalizedIncident
   })
 
@@ -71,7 +71,7 @@ export function mergeIncidents(
         process: Number(t.process ?? t.progress ?? 0),
         is_completed: t.is_completed,
       }),
-      created_at: t.created_at || new Date().toISOString(),
+      created_at: t.created_at || t.date_start || t.start_date || '',
       _from_apec: true,
     }))
 

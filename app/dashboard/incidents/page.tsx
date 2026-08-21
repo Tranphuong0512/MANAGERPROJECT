@@ -18,6 +18,7 @@ import { CreateImprovementDialog } from '@/components/improvements/CreateImprove
 import { usePermissions } from '@/hooks/usePermissions'
 import { deleteIncident, deleteImprovement } from '@/app/actions/incident-actions'
 import { customAlert, customConfirm } from '@/utils/alert'
+import { parseToVietnamDate } from '@/lib/utils'
 
 function IncidentsPageContent() {
   const router = useRouter()
@@ -248,7 +249,7 @@ function IncidentsPageContent() {
               module: t.type?.name || 'Hệ thống',
               severity: mapApecPriority(priorityId),
               status: mapApecStatus(statusId, t),
-              created_at: t.created_at || new Date().toISOString(),
+              created_at: t.created_at || t.date_start || t.start_date || '',
               reported_by: reporterEmpId ? String(reporterEmpId) : null,
               assigned_to: assigneeEmpId ? String(assigneeEmpId) : null,
               project_id: projectId ? String(projectId) : null,
@@ -356,7 +357,7 @@ function IncidentsPageContent() {
         ]
 
         // Sort by created_at desc
-        merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        merged.sort((a, b) => (parseToVietnamDate(b.created_at)?.getTime() || 0) - (parseToVietnamDate(a.created_at)?.getTime() || 0))
 
         console.log('[DEBUG_INCIDENTS] merged:', merged.slice(0, 5).map(i => ({ id: i.id, title: i.title, mapped_status: i.status, apec_progress: i.process })));
 
@@ -479,7 +480,7 @@ function IncidentsPageContent() {
               module: t.type?.name || 'Hệ thống',
               impact_level: mapApecPriority(priorityId),
               status: mapApecStatus(statusId, t),
-              created_at: t.created_at || new Date().toISOString(),
+              created_at: t.created_at || t.date_start || t.start_date || '',
               reporter_id: reporterEmpId ? String(reporterEmpId) : null,
               reporter: reporterNameFromDesc ? { id: String(reporterEmpId || ''), full_name: reporterNameFromDesc } : foundReporter,
               reporter_name: reporterNameFromDesc || foundReporter?.full_name,
@@ -571,7 +572,7 @@ function IncidentsPageContent() {
           })
         ]
 
-        merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        merged.sort((a, b) => (parseToVietnamDate(b.created_at)?.getTime() || 0) - (parseToVietnamDate(a.created_at)?.getTime() || 0))
         setImprovements(merged)
 
         // Calculate stats

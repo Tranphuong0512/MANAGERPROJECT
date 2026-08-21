@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { AlertTriangle, ArrowRight } from 'lucide-react'
+import { formatVietnamDate } from '@/lib/utils'
 
 interface RecentIncidentsProps {
   incidents: any[]
@@ -60,7 +61,7 @@ export function RecentIncidents({ incidents }: RecentIncidentsProps) {
                 <h4 className="text-[13px] font-bold text-slate-800 truncate">{inc.title}</h4>
               </div>
               <p className="text-[11px] text-slate-500 font-medium">
-                {inc.projects?.name || inc.project || 'Dự án'} • {new Date(inc.created_at).toLocaleDateString('vi-VN')}
+                {inc.projects?.name || inc.project || 'Dự án'} • {formatVietnamDate(inc.created_at)}
               </p>
             </div>
             <span className={`px-2 py-0.5 rounded text-[10px] font-bold border flex-shrink-0 ${getSeverityStyle(inc.severity)}`}>

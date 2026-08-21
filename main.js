@@ -195,6 +195,8 @@ app.whenReady().then(async () => {
     autoUpdater.logger = console;
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.disableDifferentialDownload = true; // TẮT blockmap differential để tải 1 luồng tốc độ cao từ GitHub CDN, tránh bị GitHub throttle
+    autoUpdater.allowDowngrade = false;
 
     // Bắt đầu kiểm tra cập nhật ngay sau khi khởi động
     setTimeout(() => {

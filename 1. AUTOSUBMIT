@@ -5,8 +5,8 @@
     const toggleBtn = document.createElement('div');
     toggleBtn.textContent = 'AS OFF';
     toggleBtn.style.position = 'fixed';
-    toggleBtn.style.bottom = '1px'; // Đẩy xuống một chút để tránh đè các menu hệ thống
-    toggleBtn.style.right = '410px';
+    toggleBtn.style.bottom = '110px'; // Đẩy xuống một chút để tránh đè các menu hệ thống
+    toggleBtn.style.right = '350px';
     toggleBtn.style.zIndex = '999999';
     toggleBtn.style.padding = '6px 8px';
     toggleBtn.style.backgroundColor = '#ff4d4d';

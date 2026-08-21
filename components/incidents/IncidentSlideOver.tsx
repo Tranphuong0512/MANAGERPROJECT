@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { X, Calendar, User, FolderOpen, AlertTriangle, CheckCircle2, Clock, FileText, Send, Edit2, Save } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { customAlert, customConfirm } from '@/utils/alert'
+import { formatVietnamDateTime } from '@/lib/utils'
 
 interface IncidentSlideOverProps {
   incident: any | null
@@ -402,7 +403,7 @@ export function IncidentSlideOver({ incident: initialIncident, members = [], onC
                   <Calendar className="w-4 h-4" />
                   <span className="font-medium">Thời gian</span>
                 </div>
-                <span className="font-semibold text-slate-800 flex-1">{incident.created_at ? new Date(incident.created_at).toLocaleString('vi-VN') : ''}</span>
+                <span className="font-semibold text-slate-800 flex-1">{formatVietnamDateTime(incident.created_at)}</span>
               </div>
 
               {isEditing && (

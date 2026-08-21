@@ -6,7 +6,7 @@ import {
 } from 'recharts'
 import { useRouter } from 'next/navigation'
 
-import { VN_TIMEZONE } from '@/lib/utils'
+import { VN_TIMEZONE, parseToVietnamDate } from '@/lib/utils'
 
 interface IncidentTrendChartsProps {
   incidents: any[]
@@ -40,8 +40,8 @@ export function IncidentTrendCharts({ incidents = [] }: IncidentTrendChartsProps
     
     incidents.forEach(inc => {
       if (!inc.created_at) return
-      const d = new Date(inc.created_at)
-      if (isNaN(d.getTime())) return
+      const d = parseToVietnamDate(inc.created_at)
+      if (!d || isNaN(d.getTime())) return
 
       if (d >= oneWeekAgo) {
         const dayFormatted = new Intl.DateTimeFormat('vi-VN', {
@@ -74,13 +74,14 @@ export function IncidentTrendCharts({ incidents = [] }: IncidentTrendChartsProps
 
     incidents.forEach(inc => {
       if ((inc.status === 'resolved' || inc.status === 'closed') && inc.updated_at) {
-        const created = new Date(inc.created_at).getTime()
-        const resolved = new Date(inc.updated_at).getTime()
-        const hours = (resolved - created) / (1000 * 60 * 60)
-        
-        if (stats[inc.severity]) {
-          stats[inc.severity].totalHours += hours
-          stats[inc.severity].count++
+        const created = parseToVietnamDate(inc.created_at)?.getTime() || 0
+        const resolved = parseToVietnamDate(inc.updated_at)?.getTime() || 0
+        if (created > 0 && resolved >= created) {
+          const hours = (resolved - created) / (1000 * 60 * 60)
+          if (stats[inc.severity]) {
+            stats[inc.severity].totalHours += hours
+            stats[inc.severity].count++
+          }
         }
       }
     })

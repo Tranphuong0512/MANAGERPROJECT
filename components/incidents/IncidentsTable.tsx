@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import { ExternalLink, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { formatVietnamDate, formatVietnamTime } from '@/lib/utils'
+import { formatVietnamDate, formatVietnamTime, parseToVietnamDate } from '@/lib/utils'
 
 interface IncidentsTableProps {
   incidents: any[]
@@ -19,7 +19,7 @@ export function IncidentsTable({ incidents, members = [], onIncidentClick, onInc
   const router = useRouter()
 
   const displayIncidents = useMemo(() => {
-    return [...incidents].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+    return [...incidents].sort((a, b) => (parseToVietnamDate(b.created_at)?.getTime() || 0) - (parseToVietnamDate(a.created_at)?.getTime() || 0))
   }, [incidents])
 
   const getSeverityStyle = (s: string) => {
@@ -137,9 +137,11 @@ export function IncidentsTable({ incidents, members = [], onIncidentClick, onInc
                   <div className="text-xs text-slate-700 font-semibold">
                     {formatVietnamDate(inc.created_at)}
                   </div>
-                  <div className="text-[11px] text-slate-400 font-medium">
-                    {formatVietnamTime(inc.created_at)}
-                  </div>
+                  {formatVietnamTime(inc.created_at) && (
+                    <div className="text-[11px] text-slate-400 font-medium">
+                      {formatVietnamTime(inc.created_at)}
+                    </div>
+                  )}
                 </td>
                 <td className="px-6 py-4 text-center" onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

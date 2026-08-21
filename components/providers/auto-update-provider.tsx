@@ -64,7 +64,7 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
     const cleanupProgress = electron.onUpdateProgress?.((progressObj: any) => {
       if (progressObj?.percent != null) {
         const p = Math.min(100, Math.max(0, Math.round(progressObj.percent)))
-        setDownloadPercent(p)
+        setDownloadPercent((prev) => Math.max(prev, p))
         if (p >= 100) {
           setIsReadyToRestart(true)
         }
@@ -82,8 +82,13 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
     }
   }, [])
 
-  // Start smooth progress animation if real progress is waiting
+  // Chỉ chạy animation mô phỏng khi KHÔNG PHẢI môi trường Electron (môi trường Web thuần)
   useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).electron) {
+      // Trong Electron: Tiến trình tải thực tế từ IPC là 100% chính xác, không dùng timer giả
+      return
+    }
+
     if (updateInfo?.update_available && !isReadyToRestart) {
       if (simTimerRef.current) clearInterval(simTimerRef.current)
 
@@ -92,19 +97,17 @@ export function AutoUpdateProvider({ children }: { children: React.ReactNode }) 
 
       simTimerRef.current = setInterval(() => {
         setDownloadPercent((prev) => {
-          if (prev >= 96) {
-            return prev
-          }
-          const increment = Math.floor(Math.random() * 8) + 4
+          if (prev >= 96) return prev
+          const increment = Math.floor(Math.random() * 6) + 3
           return Math.min(96, prev + increment)
         })
-      }, 1200)
+      }, 1500)
 
       return () => {
         if (simTimerRef.current) clearInterval(simTimerRef.current)
       }
     }
-  }, [updateInfo?.update_available, isReadyToRestart])
+  }, [updateInfo?.update_available, isReadyToRestart, downloadPercent])
 
   const checkNow = useCallback(async (showNoUpdateToast: boolean = false) => {
     setIsChecking(true)

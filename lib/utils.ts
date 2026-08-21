@@ -62,17 +62,48 @@ export function getVietnamDateString(dateInput?: string | Date | number | null):
 }
 
 /**
- * Parse bất kỳ chuỗi ngày / Date nào sang Date an toàn.
+ * Parse bất kỳ chuỗi ngày / Date nào sang Date an toàn, tự động nhận diện và xử lý
+ * chuỗi không có múi giờ từ APEC/MySQL để luôn neo đúng múi giờ Việt Nam (GMT+7).
  */
-export function parseToVietnamDate(dateStr?: string | Date | null): Date | null {
-  if (!dateStr) return null
-  try {
-    const d = dateStr instanceof Date ? dateStr : new Date(dateStr)
-    if (isNaN(d.getTime())) return null
-    return d
-  } catch {
-    return null
+export function parseToVietnamDate(dateInput?: string | Date | number | null): Date | null {
+  if (!dateInput) return null
+  if (dateInput instanceof Date) return isNaN(dateInput.getTime()) ? null : dateInput
+  if (typeof dateInput === 'number') {
+    const d = new Date(dateInput)
+    return isNaN(d.getTime()) ? null : d
   }
+
+  const s = String(dateInput).trim()
+  if (!s) return null
+
+  // 1. Định dạng chỉ có ngày: YYYY-MM-DD -> Tạo Date đúng 00:00:00 theo múi giờ Việt Nam (17:00 UTC hôm trước)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map(Number)
+    return new Date(Date.UTC(y, m - 1, d, 0, 0, 0) - 7 * 3600 * 1000)
+  }
+
+  // 2. Định dạng ngày Việt Nam: DD/MM/YYYY hoặc DD/MM/YYYY HH:mm:ss
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(s)) {
+    const [datePart, timePart] = s.split(' ')
+    const [d, m, y] = datePart.split('/').map(Number)
+    if (timePart) {
+      const [hh, mm, ss] = timePart.split(':').map(Number)
+      return new Date(Date.UTC(y, m - 1, d, hh || 0, mm || 0, ss || 0) - 7 * 3600 * 1000)
+    }
+    return new Date(Date.UTC(y, m - 1, d, 0, 0, 0) - 7 * 3600 * 1000)
+  }
+
+  // 3. Naive datetime từ MySQL/APEC (YYYY-MM-DD HH:mm:ss hoặc YYYY-MM-DDTHH:mm:ss không có đuôi Z hay offset)
+  // Đây là thời gian đã nằm ở múi giờ VN -> Gắn tường minh +07:00 để trình duyệt/Node không bị double shift +7 tiếng
+  if (/^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) {
+    const normalized = s.replace(' ', 'T') + '+07:00'
+    const d = new Date(normalized)
+    if (!isNaN(d.getTime())) return d
+  }
+
+  // 4. Các định dạng chuẩn ISO khác (có 'Z' hoặc offset '+07:00')
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? null : d
 }
 
 export const parseToDate = parseToVietnamDate
@@ -91,8 +122,8 @@ export function formatVietnamDate(dateStr?: string | Date | number | null): stri
       }
     }
 
-    const d = dateStr instanceof Date ? dateStr : new Date(dateStr)
-    if (isNaN(d.getTime())) return '--/--/----'
+    const d = parseToVietnamDate(dateStr)
+    if (!d) return '--/--/----'
 
     return new Intl.DateTimeFormat('en-GB', {
       timeZone: VN_TIMEZONE,
@@ -107,12 +138,18 @@ export function formatVietnamDate(dateStr?: string | Date | number | null): stri
 
 /**
  * Định dạng giờ theo chuẩn Việt Nam: HH:mm:ss
+ * Nếu đầu vào chỉ có ngày (không có giờ) thì trả về rỗng thay vì tạo giờ giả định 07:00:00
  */
 export function formatVietnamTime(dateStr?: string | Date | number | null): string {
   if (!dateStr) return ''
   try {
-    const d = dateStr instanceof Date ? dateStr : new Date(dateStr)
-    if (isNaN(d.getTime())) return ''
+    if (typeof dateStr === 'string') {
+      const s = dateStr.trim()
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return '' // Không có thông tin giờ
+    }
+
+    const d = parseToVietnamDate(dateStr)
+    if (!d) return ''
 
     return new Intl.DateTimeFormat('vi-VN', {
       timeZone: VN_TIMEZONE,
@@ -127,17 +164,15 @@ export function formatVietnamTime(dateStr?: string | Date | number | null): stri
 }
 
 /**
- * Định dạng ngày giờ đầy đủ theo chuẩn Việt Nam: DD/MM/YYYY HH:mm:ss
+ * Định dạng ngày giờ đầy đủ theo chuẩn Việt Nam: DD/MM/YYYY HH:mm:ss (hoặc DD/MM/YYYY nếu không có giờ)
  */
 export function formatVietnamDateTime(dateStr?: string | Date | number | null): string {
   if (!dateStr) return '--/--/----'
   try {
-    const d = dateStr instanceof Date ? dateStr : new Date(dateStr)
-    if (isNaN(d.getTime())) return '--/--/----'
-
-    const datePart = formatVietnamDate(d)
-    const timePart = formatVietnamTime(d)
-    if (datePart === '--/--/----' || !timePart) return datePart
+    const datePart = formatVietnamDate(dateStr)
+    const timePart = formatVietnamTime(dateStr)
+    if (datePart === '--/--/----') return '--/--/----'
+    if (!timePart) return datePart
     return `${datePart} ${timePart}`
   } catch {
     return '--/--/----'

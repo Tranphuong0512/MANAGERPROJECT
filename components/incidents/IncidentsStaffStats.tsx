@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { Users, UserCheck, ShieldAlert, CheckCircle2, Clock, AlertTriangle, Activity, Sparkles, Calendar } from 'lucide-react'
-import { formatVietnamDateTime, formatVietnamDate, formatVietnamTime } from '@/lib/utils'
+import { formatVietnamDateTime, formatVietnamDate, formatVietnamTime, parseToVietnamDate } from '@/lib/utils'
 
 interface IncidentsStaffStatsProps {
   incidents: any[]
@@ -41,7 +41,7 @@ export function IncidentsStaffStats({ incidents = [], type = 'incidents' }: Inci
 
     return incidents.filter(inc => {
       if (!inc.created_at) return true
-      const itemTime = new Date(inc.created_at).getTime()
+      const itemTime = parseToVietnamDate(inc.created_at)?.getTime() || 0
       if (timeFilter === 'today') return itemTime >= today
       if (timeFilter === 'week') return itemTime >= weekTime
       if (timeFilter === 'month') return itemTime >= startOfMonth
