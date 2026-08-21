@@ -15,31 +15,7 @@ import crypto from 'crypto';
  * - Thêm / Sửa / Xóa Checklist / Loại nhiệm vụ (Task Types)
  */
 
-/**
- * Map status (string/object/number) -> numeric ID cho Apec Global API
- * 1 = Chưa thực hiện / Lên kế hoạch, 2 = Đang thực hiện, 3 = Chờ duyệt, 4 = Hoàn thành / Đã duyệt
- */
-function resolveStatusId(st: any, fallbackProcess?: number): number {
-  if (st && typeof st === 'object') {
-    if (st.id) return Number(st.id);
-    const name = String(st.name || '').toLowerCase();
-    if (name.includes('hoàn thành') || name.includes('done') || name.includes('completed') || name.includes('đã duyệt') || name.includes('resolved') || name.includes('implemented') || name.includes('đóng') || name.includes('closed')) return 4;
-    if (name.includes('chờ duyệt') || name.includes('review') || name.includes('chờ') || name.includes('pending')) return 3;
-    if (name.includes('đang') || name.includes('in_progress') || name.includes('progress') || name.includes('investigating') || name.includes('fixing') || name.includes('evaluating') || name.includes('doing')) return 2;
-    if (name.includes('chưa') || name.includes('todo') || name.includes('not_started') || name.includes('planning') || name.includes('kế hoạch') || name.includes('new') || name.includes('mới')) return 1;
-  }
-  if (typeof st === 'string') {
-    const s = st.toLowerCase();
-    if (s === 'done' || s === 'completed' || s === 'resolved' || s === 'implemented' || s === 'closed' || s === 'finished') return 4;
-    if (s === 'review' || s === 'pending_review' || s === 'pending_approval' || s === 'waiting_approval' || s === 'pending') return 3;
-    if (s === 'in_progress' || s === 'doing' || s === 'investigating' || s === 'fixing' || s === 'evaluating' || s === 'active') return 2;
-    if (s === 'todo' || s === 'not_started' || s === 'new' || s === 'planning' || s === 'planned' || s === 'on_hold' || s === 'hold' || s === 'paused' || s === 'cancelled' || s === 'canceled' || s === 'rejected' || s === 'proposed' || s === 'open') return 1;
-  }
-  if (st != null && !Number.isNaN(Number(st)) && Number(st) > 0) return Number(st);
-  const p = fallbackProcess ?? 0;
-  // QUAN TRỌNG: Nhiệm vụ hoàn thành 100% từ nhân viên gửi lên phải là status 3 (Chờ duyệt), không được tự duyệt thành 4
-  return p >= 100 ? 3 : p > 0 ? 2 : 1;
-}
+import { resolveStatusToNumericId as resolveStatusId } from '@/lib/domain';
 
 function resolveNumericId(val: any): number | string | undefined {
   if (val == null) return undefined;

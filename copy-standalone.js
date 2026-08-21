@@ -65,7 +65,7 @@ try {
 
   console.log('Installing electron main process dependencies in standalone directory...');
   const { execSync } = require('child_process');
-  execSync('npm install electron-updater dotenv --no-save', {
+  execSync('npm install electron-updater dotenv --no-save --legacy-peer-deps', {
     cwd: path.join(__dirname, '.next', 'standalone'),
     stdio: 'inherit'
   });
@@ -97,8 +97,8 @@ try {
 
   console.log('Standalone preparation complete!');
 
-  console.log('Building Electron app and publishing with electron-builder...');
-  execSync('npx electron-builder --win -p always', {
+  console.log('Building Electron app with electron-builder...');
+  execSync('npx electron-builder --win -p never', {
     cwd: path.join(__dirname, '.next', 'standalone'),
     stdio: 'inherit',
     env: process.env
