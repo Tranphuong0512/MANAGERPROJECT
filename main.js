@@ -170,6 +170,10 @@ async function createWindow() {
     Menu.setApplicationMenu(null);
     mainWindow.setMenuBarVisibility(false);
 
+    // Set standard Chrome user agent so Google OAuth does not block or show white screen
+    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+    mainWindow.webContents.setUserAgent(userAgent);
+
     mainWindow.loadURL(`http://127.0.0.1:${port}`);
 
     mainWindow.on('closed', () => {

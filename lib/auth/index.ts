@@ -21,10 +21,11 @@ export async function signOut() {
 }
 
 export async function signInWithGoogle() {
+  const redirectOrigin = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000')
   return supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback`,
+      redirectTo: `${redirectOrigin}/auth/callback`,
     },
   })
 }
