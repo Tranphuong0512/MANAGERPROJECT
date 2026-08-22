@@ -9,37 +9,34 @@ import { updateSession } from '@/lib/supabase/middleware'
  * 3. Luôn hiển thị trang /login khi mở ứng dụng (KHÔNG tự động đăng nhập)
  */
 export async function proxy(request: NextRequest) {
-  // 1. Refresh session và cập nhật cookies
-  const response = await updateSession(request)
-
   const { pathname } = request.nextUrl
 
-  // Bỏ qua các static resources và API routes
+  // Bỏ qua các static resources, API routes, auth callback
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/auth') ||
     pathname.includes('.') // static files (favicon, images, etc.)
   ) {
-    return response
+    return NextResponse.next()
   }
 
-  // 2. Kiểm tra auth session từ cookies
-  const supabaseAuthToken = request.cookies.getAll().find(
-    (cookie) => cookie.name.startsWith('sb-') && cookie.name.endsWith('-auth-token')
-  )
+  // 1. Refresh session và lấy user xác thực
+  const { supabaseResponse, user } = await updateSession(request)
 
-  const hasSession = !!supabaseAuthToken?.value
-
-  // 3. Bảo vệ route dashboard — redirect về login nếu chưa xác thực
-  if (pathname.startsWith('/dashboard') && !hasSession) {
+  // 2. Bảo vệ route dashboard — redirect về /login nếu chưa xác thực
+  if (pathname.startsWith('/dashboard') && !user) {
     const loginUrl = request.nextUrl.clone()
     loginUrl.pathname = '/login'
-    loginUrl.searchParams.set('redirect', pathname)
-    return NextResponse.redirect(loginUrl)
+    loginUrl.searchParams.delete('redirect')
+    const redirectRes = NextResponse.redirect(loginUrl)
+    supabaseResponse.cookies.getAll().forEach((c: any) => {
+      redirectRes.cookies.set(c.name, c.value, c)
+    })
+    return redirectRes
   }
 
-  return response
+  return supabaseResponse
 }
 
 export const config = {

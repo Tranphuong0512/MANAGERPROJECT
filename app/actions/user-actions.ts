@@ -45,6 +45,12 @@ export async function createPlaceholderUser(data: { fullName: string; organizati
 
     const userId = userData.user.id
 
+    // 2b. Auto-approve placeholder users (admin creates them directly)
+    await adminClient
+      .from('profiles')
+      .update({ approval_status: 'approved' })
+      .eq('id', userId)
+
     // 3. The trigger 005 might auto-create an org for them.
     // Wait, the trigger creates an org if they don't have one in organization_members.
     // However, we immediately want to add them to a specific organization.

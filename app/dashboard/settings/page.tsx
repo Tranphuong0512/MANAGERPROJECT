@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Save, Globe, Database, ArrowRight, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react'
+import { Save, Globe, Database, ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react'
 import { ApecGlobalSyncDialog } from '@/components/apec-global/apec-global-sync-dialog'
 import { usePermissions } from '@/hooks/usePermissions'
 
@@ -23,15 +23,6 @@ export default function SettingsPage() {
   const [apecSecretKey, setApecSecretKey] = useState('')
   const [showSecretKey, setShowSecretKey] = useState(false)
   const [savedSecretSuccess, setSavedSecretSuccess] = useState(false)
-
-  // Password change state
-  const [passwordData, setPasswordData] = useState({ current: '', new_password: '', confirm: '' })
-  const [isChangingPassword, setIsChangingPassword] = useState(false)
-  const [passwordError, setPasswordError] = useState<string | null>(null)
-  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null)
-  const [showCurrentPw, setShowCurrentPw] = useState(false)
-  const [showNewPw, setShowNewPw] = useState(false)
-  const [showConfirmPw, setShowConfirmPw] = useState(false)
 
   useEffect(() => {
     const savedKey = localStorage.getItem('nix_apec_global_secret_key') || ''
@@ -93,53 +84,6 @@ export default function SettingsPage() {
       setError(err.message || 'Lưu cài đặt thất bại')
     } finally {
       setIsSaving(false)
-    }
-  }
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setPasswordError(null)
-    setPasswordSuccess(null)
-
-    if (!passwordData.new_password || !passwordData.confirm) {
-      setPasswordError('Vui lòng nhập đầy đủ mật khẩu mới và xác nhận')
-      return
-    }
-    if (passwordData.new_password.length < 6) {
-      setPasswordError('Mật khẩu mới phải có ít nhất 6 ký tự')
-      return
-    }
-    if (passwordData.new_password !== passwordData.confirm) {
-      setPasswordError('Mật khẩu xác nhận không khớp')
-      return
-    }
-
-    setIsChangingPassword(true)
-    try {
-      // Verify current password first by re-authenticating
-      if (passwordData.current) {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: user?.email,
-          password: passwordData.current
-        })
-        if (signInError) {
-          throw new Error('Mật khẩu hiện tại không đúng')
-        }
-      }
-
-      // Update password
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: passwordData.new_password
-      })
-      if (updateError) throw updateError
-
-      setPasswordSuccess('Đổi mật khẩu thành công!')
-      setPasswordData({ current: '', new_password: '', confirm: '' })
-      setTimeout(() => setPasswordSuccess(null), 5000)
-    } catch (err: any) {
-      setPasswordError(err.message || 'Đổi mật khẩu thất bại')
-    } finally {
-      setIsChangingPassword(false)
     }
   }
 
@@ -220,112 +164,44 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Change Password */}
+      {/* Google Account Info */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-8 h-8 bg-amber-100 rounded-md flex items-center justify-center text-amber-600">
-            <Lock className="w-4 h-4" />
+          <div className="w-8 h-8 bg-blue-100 rounded-md flex items-center justify-center">
+            <svg viewBox="0 0 24 24" className="w-4 h-4">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
           </div>
-          <h2 className="text-xl font-bold text-slate-900">Đổi mật khẩu</h2>
+          <h2 className="text-xl font-bold text-slate-900">Tài khoản Google</h2>
         </div>
-
-        {passwordError && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm font-medium">
-            {passwordError}
-          </div>
-        )}
-        {passwordSuccess && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm font-medium flex items-center gap-2">
-            <span className="text-green-500">✓</span> {passwordSuccess}
-          </div>
-        )}
-
-        <form onSubmit={handleChangePassword} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-900 mb-1">
-              Mật khẩu hiện tại
-            </label>
-            <div className="relative">
-              <input
-                type={showCurrentPw ? 'text' : 'password'}
-                value={passwordData.current}
-                onChange={(e) => setPasswordData({ ...passwordData, current: e.target.value })}
-                className="w-full px-4 py-2 pr-10 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Nhập mật khẩu hiện tại"
+        <div className="space-y-4">
+          <div className="flex items-center gap-4">
+            {(profile?.google_avatar_url || profile?.avatar_url || user?.user_metadata?.picture) ? (
+              <img
+                src={profile?.google_avatar_url || profile?.avatar_url || user?.user_metadata?.picture}
+                alt="Google Avatar"
+                className="w-14 h-14 rounded-full border-2 border-slate-100 shadow-sm"
               />
-              <button
-                type="button"
-                onClick={() => setShowCurrentPw(!showCurrentPw)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">Nhập mật khẩu hiện tại để xác minh danh tính</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-900 mb-1">
-              Mật khẩu mới *
-            </label>
-            <div className="relative">
-              <input
-                type={showNewPw ? 'text' : 'password'}
-                value={passwordData.new_password}
-                onChange={(e) => setPasswordData({ ...passwordData, new_password: e.target.value })}
-                className="w-full px-4 py-2 pr-10 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPw(!showNewPw)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-900 mb-1">
-              Xác nhận mật khẩu mới *
-            </label>
-            <div className="relative">
-              <input
-                type={showConfirmPw ? 'text' : 'password'}
-                value={passwordData.confirm}
-                onChange={(e) => setPasswordData({ ...passwordData, confirm: e.target.value })}
-                className={`w-full px-4 py-2 pr-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  passwordData.confirm && passwordData.confirm !== passwordData.new_password
-                    ? 'border-red-300 bg-red-50/30'
-                    : 'border-slate-300'
-                }`}
-                placeholder="Nhập lại mật khẩu mới"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPw(!showConfirmPw)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                {showConfirmPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            {passwordData.confirm && passwordData.confirm !== passwordData.new_password && (
-              <p className="text-xs text-red-500 mt-1">Mật khẩu xác nhận không khớp</p>
+            ) : (
+              <div className="w-14 h-14 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-xl">
+                {(profile?.full_name || user?.email || '?').charAt(0).toUpperCase()}
+              </div>
             )}
+            <div>
+              <p className="text-sm font-bold text-slate-900">{profile?.full_name || user?.user_metadata?.full_name || 'User'}</p>
+              <p className="text-sm text-slate-500">{user?.email}</p>
+              <span className="inline-block mt-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                ✓ Đã xác thực qua Google
+              </span>
+            </div>
           </div>
-
-          <button
-            type="submit"
-            disabled={isChangingPassword || !passwordData.new_password || !passwordData.confirm || passwordData.new_password !== passwordData.confirm}
-            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg disabled:bg-slate-400 disabled:cursor-not-allowed transition-colors"
-          >
-            <Lock className="w-4 h-4" />
-            {isChangingPassword ? 'Đang đổi mật khẩu...' : 'Đổi mật khẩu'}
-          </button>
-        </form>
+          <p className="text-xs text-slate-400">
+            Tài khoản được xác thực thông qua Google OAuth. Không cần mật khẩu.
+          </p>
+        </div>
       </div>
 
       {/* APEC GLOBAL API Integration */}

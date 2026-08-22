@@ -46,9 +46,21 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
 
         const { data: profile } = await supabase
           .from('profiles')
-          .select('is_super_admin')
+          .select('is_super_admin, approval_status')
           .eq('id', user.id)
           .single()
+
+        // Check approval status — redirect if not approved
+        if (profile?.approval_status !== 'approved' && !profile?.is_super_admin) {
+          if (typeof window !== 'undefined') {
+            if (profile?.approval_status === 'rejected') {
+              window.location.href = '/auth/access-denied'
+            } else {
+              window.location.href = '/auth/pending-approval'
+            }
+          }
+          return
+        }
 
         let orgs: Organization[] = []
 

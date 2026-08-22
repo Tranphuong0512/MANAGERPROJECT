@@ -20,20 +20,6 @@ export async function signOut() {
   await supabase.auth.signOut()
 }
 
-export async function signInWithEmail(email: string, password: string) {
-  return supabase.auth.signInWithPassword({
-    email,
-    password,
-  })
-}
-
-export async function signUpWithEmail(email: string, password: string) {
-  return supabase.auth.signUp({
-    email,
-    password,
-  })
-}
-
 export async function signInWithGoogle() {
   return supabase.auth.signInWithOAuth({
     provider: 'google',
@@ -41,6 +27,23 @@ export async function signInWithGoogle() {
       redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback`,
     },
   })
+}
+
+/**
+ * Kiểm tra trạng thái phê duyệt của user
+ */
+export async function checkApprovalStatus(userId: string) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('approval_status, google_email, full_name, avatar_url, google_avatar_url, is_super_admin')
+    .eq('id', userId)
+    .single()
+
+  if (error || !data) return { status: 'pending' as const, profile: null }
+  return {
+    status: data.approval_status as 'pending' | 'approved' | 'rejected',
+    profile: data
+  }
 }
 
 export async function updateProfile(userId: string, data: any) {

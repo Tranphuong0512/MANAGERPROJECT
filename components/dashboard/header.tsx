@@ -219,8 +219,8 @@ export function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
               <p className="text-[11px] text-slate-500 font-medium">{getRoleDisplay()}</p>
             </div>
             <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold overflow-hidden border border-slate-200">
-              {profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+              {(profile?.google_avatar_url || profile?.avatar_url || user?.user_metadata?.picture || user?.user_metadata?.avatar_url) ? (
+                <img src={profile?.google_avatar_url || profile?.avatar_url || user?.user_metadata?.picture || user?.user_metadata?.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
                 (profile?.full_name || user.email)?.charAt(0).toUpperCase()
               )}

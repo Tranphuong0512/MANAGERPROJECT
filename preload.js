@@ -2,9 +2,6 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electron', {
   isElectron: true,
-  getSavedCredentials: () => ipcRenderer.invoke('get-saved-credentials'),
-  saveCredentials: (credentials) => ipcRenderer.invoke('save-credentials', credentials),
-  clearSavedCredentials: () => ipcRenderer.invoke('clear-saved-credentials'),
   onUpdateAvailable: (callback) => {
     const handler = (_, info) => callback(info);
     ipcRenderer.on('update-available', handler);

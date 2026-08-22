@@ -13,7 +13,7 @@ export async function updateSession(request: NextRequest) {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!url || !key) {
-    return supabaseResponse
+    return { supabaseResponse, user: null }
   }
 
   const supabase = createServerClient(url, key, {
@@ -34,7 +34,7 @@ export async function updateSession(request: NextRequest) {
   })
 
   // Refresh token nếu đã hết hạn và đồng bộ vào cookie
-  await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  return supabaseResponse
+  return { supabaseResponse, user }
 }

@@ -40,7 +40,6 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Fallback: user couldn't be retrieved but session exchange worked
       const forwardedHost = request.headers.get('x-forwarded-host')
       const isLocalEnv = process.env.NODE_ENV === 'development'
       if (isLocalEnv) {

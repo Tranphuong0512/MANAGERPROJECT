@@ -9,7 +9,7 @@ import { usePermissions, Permission } from '@/hooks/usePermissions'
 import {
   LayoutDashboard, FolderOpen, AlertTriangle,
   Building2, BarChart2, Settings, ChevronLeft, Users,
-  Shield, TrendingUp, X
+  Shield, TrendingUp, X, UserCheck
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -31,11 +31,17 @@ const navItems: NavItem[] = [
   { name: 'Phân quyền', href: '/dashboard/settings/roles', icon: Shield, permission: 'owner_only' },
 ]
 
+// Super Admin only items
+const superAdminItems: NavItem[] = [
+  { name: 'Duyệt tài khoản', href: '/dashboard/user-approval', icon: UserCheck },
+]
+
 export function Sidebar({ open, setOpen }: SidebarProps) {
   const pathname = usePathname()
-  const { activeOrganization } = useOrganization()
+  const { activeOrganization, isSuperAdmin } = useOrganization()
   const { hasPermission, isOwner } = usePermissions()
   const [orgProjects, setOrgProjects] = useState<any[]>([])
+  const [pendingUserCount, setPendingUserCount] = useState(0)
   const [projectStatusFilter, setProjectStatusFilter] = useState('active')
 
   useEffect(() => {
@@ -108,6 +114,25 @@ export function Sidebar({ open, setOpen }: SidebarProps) {
     };
     loadProjects();
   }, [activeOrganization, projectStatusFilter])
+
+  // Fetch pending user count for Super Admin badge
+  useEffect(() => {
+    if (!isSuperAdmin) return
+    const fetchPendingCount = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) return
+        const res = await fetch('/api/user-approval?status=pending', {
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        })
+        const json = await res.json()
+        setPendingUserCount(json.users?.length || 0)
+      } catch { /* ignore */ }
+    }
+    fetchPendingCount()
+    const interval = setInterval(fetchPendingCount, 30000)
+    return () => clearInterval(interval)
+  }, [isSuperAdmin])
 
   const handleNavClick = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 768 && setOpen) {
@@ -188,6 +213,35 @@ export function Sidebar({ open, setOpen }: SidebarProps) {
                 <span className={`text-sm font-medium whitespace-nowrap ${isActive ? 'text-white font-bold' : 'text-slate-600 group-hover:text-slate-900'} ${!open ? 'md:hidden' : ''}`}>
                   {item.name}
                 </span>
+              </Link>
+            )
+          })}
+
+          {/* Super Admin: Duyệt tài khoản */}
+          {isSuperAdmin && superAdminItems.map((item) => {
+            const Icon = item.icon
+            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={handleNavClick}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-200'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+                title={!open ? item.name : undefined}
+              >
+                <Icon className={`w-5 h-5 flex-shrink-0 transition-colors ${isActive ? 'text-white' : 'text-amber-500 group-hover:text-amber-600'}`} />
+                <span className={`text-sm font-medium whitespace-nowrap ${isActive ? 'text-white font-bold' : 'text-slate-600 group-hover:text-slate-900'} ${!open ? 'md:hidden' : ''}`}>
+                  {item.name}
+                </span>
+                {pendingUserCount > 0 && (
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'} animate-pulse`}>
+                    {pendingUserCount}
+                  </span>
+                )}
               </Link>
             )
           })}
